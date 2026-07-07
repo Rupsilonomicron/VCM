@@ -10,6 +10,7 @@ discord.py クライアントも同一の asyncio イベントループで起動
 
 import asyncio
 import logging
+import os
 import webbrowser
 
 import uvicorn
@@ -65,7 +66,10 @@ async def main():
     engine.start_detection()
 
     async def open_browser_when_ready():
-        """サーバーが待ち受けを開始してからGUIを開く（早すぎると接続拒否画面になる）。"""
+        """サーバーが待ち受けを開始してからGUIを開く（早すぎると接続拒否画面になる）。
+        アップデート後の再起動時（VCM_NO_BROWSER=1）は開かない（既存タブが引き継ぐ）。"""
+        if os.environ.get("VCM_NO_BROWSER") == "1":
+            return
         while not server.started:
             if server.should_exit:  # ポート使用中などで起動に失敗した場合
                 return

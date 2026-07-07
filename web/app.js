@@ -45,11 +45,32 @@ async function api(method, path, body) {
 }
 
 // --- WebSocket ---------------------------------------------------------
+let updateRestarting = false;  // アップデートによる再起動を待っている状態
+
 function connect() {
   const ws = new WebSocket(`ws://${location.host}/ws`);
   ws.onopen = () => { wsConnected = true; updateStatus(); };
-  ws.onclose = () => { wsConnected = false; updateStatus(); setTimeout(connect, 1500); };
+  ws.onclose = () => {
+    wsConnected = false;
+    updateStatus();
+    if (updateRestarting) { waitForRestart(); return; }
+    setTimeout(connect, 1500);
+  };
   ws.onmessage = (e) => { lastSnapshot = JSON.parse(e.data); render(); };
+}
+
+// アップデートの再起動後、サーバーが戻ったらページごと再読み込みして
+// 新しいバージョンのGUI（HTML/JS/CSS）に切り替える
+function waitForRestart() {
+  const timer = setInterval(async () => {
+    try {
+      const res = await fetch("/", { cache: "no-store" });
+      if (res.ok) {
+        clearInterval(timer);
+        location.reload();
+      }
+    } catch (e) { /* まだ再起動中 */ }
+  }, 1000);
 }
 
 // ヘッダの状態表示: WS 切断中は「未接続」、接続中は bot の状態を表示
@@ -84,8 +105,9 @@ function renderUpdate() {
     updateMsgEl.textContent = "ダウンロード中…";
     updateMsgEl.className = "token-msg";
   } else if (st === "restarting") {
+    updateRestarting = true;  // 切断後はサーバー復帰を待って自動リロード
     updateMsgEl.textContent =
-      "まもなく再起動します。新しいタブが開いたら、このタブは閉じてください。";
+      "まもなく再起動します。そのままお待ちください（この画面が自動で切り替わります）。";
     updateMsgEl.className = "token-msg okmsg";
   } else if (st.startsWith("error:")) {
     updateMsgEl.textContent = st.slice(6);

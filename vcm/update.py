@@ -149,6 +149,8 @@ async def prepare_and_launch(info: dict, *, dst: str = ROOT_DIR, launch: bool = 
                 "VCM_SRC": src,
                 "VCM_DST": dst,
                 "VCM_TMP": tmp,
+                # 再起動時はブラウザを開かない（既存タブが自動で再読み込みして引き継ぐ）
+                "VCM_NO_BROWSER": "1",
             }
             subprocess.Popen(
                 ["cmd", "/c", bat_path], env=env, cwd=tmp, close_fds=True,
