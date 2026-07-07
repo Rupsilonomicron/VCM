@@ -1,4 +1,4 @@
-# VCM — VoiceChatMover v1.3.0
+# VCM — VoiceChatMover v1.3.1
 
 大会やイベントで、メインVC ⇄ チーム別VC の分散・集合をブラウザGUIから素早く行うための
 Discord bot（ローカル起動・自分用）。

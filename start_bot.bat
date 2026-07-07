@@ -2,10 +2,8 @@
 rem === Start VCM (VoiceChatMover) ===
 cd /d "%~dp0"
 
-rem --- Open the GUI in the default browser ---
-start "" http://127.0.0.1:8765
-
 rem --- Run the app (discord bot + local web server) ---
+rem The app opens the GUI in the browser once the server is ready.
 rem Closing the GUI in the browser stops the app and this window closes too.
 ".venv\Scripts\python.exe" -m vcm.main
 
