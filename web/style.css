@@ -215,6 +215,7 @@ main {
 .board:not(:empty) + .team-actions { margin-top: 12px; }
 .btn.ghost { background: transparent; color: var(--muted); }
 .btn.ghost:hover { color: var(--text); }
+a.btn { text-decoration: none; display: inline-block; }
 
 .empty-hint { color: var(--muted); font-size: 12px; text-align: center; padding: 8px 0; }
 

@@ -62,15 +62,48 @@ const BOT_STATUS = {
 };
 
 const updateLinkEl = document.getElementById("update-link");
+const updateModalEl = document.getElementById("update-modal");
+const updateApplyBtn = document.getElementById("update-apply");
+const updateMsgEl = document.getElementById("update-msg");
 
 function renderUpdate() {
   const u = lastSnapshot.update;
-  if (u) {
-    updateLinkEl.textContent = `⬆ ${u.version} が公開されています`;
-    updateLinkEl.href = u.url;
-  }
   updateLinkEl.classList.toggle("hidden", !u);
+  if (!u) return;
+  updateLinkEl.textContent = `⬆ ${u.version} が公開されています`;
+  updateLinkEl.href = u.url;
+
+  document.getElementById("update-desc").textContent =
+    `新しいバージョン ${u.version} が公開されています。`;
+  document.getElementById("update-release").href = u.url;
+  updateApplyBtn.classList.toggle("hidden", !u.can_apply);
+
+  const st = lastSnapshot.update_status || "idle";
+  updateApplyBtn.disabled = st === "downloading" || st === "restarting";
+  if (st === "downloading") {
+    updateMsgEl.textContent = "ダウンロード中…";
+    updateMsgEl.className = "token-msg";
+  } else if (st === "restarting") {
+    updateMsgEl.textContent =
+      "まもなく再起動します。新しいタブが開いたら、このタブは閉じてください。";
+    updateMsgEl.className = "token-msg okmsg";
+  } else if (st.startsWith("error:")) {
+    updateMsgEl.textContent = st.slice(6);
+    updateMsgEl.className = "token-msg err";
+  } else {
+    updateMsgEl.textContent = "";
+  }
 }
+
+updateLinkEl.addEventListener("click", (e) => {
+  const u = lastSnapshot.update;
+  if (u && u.can_apply) {  // 配布版はモーダルで選択。ソース実行時はリンクとして動作
+    e.preventDefault();
+    updateModalEl.classList.remove("hidden");
+  }
+});
+document.getElementById("update-cancel").onclick = () => updateModalEl.classList.add("hidden");
+updateApplyBtn.onclick = () => api("POST", "/api/update/apply");
 
 function updateStatus() {
   let text = "未接続", cls = "off", title = "";

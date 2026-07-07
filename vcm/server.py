@@ -25,6 +25,7 @@ from pydantic import BaseModel
 
 from vcm import config as vcm_config
 from vcm import tts as tts_store
+from vcm import update as vcm_update
 
 ROOT_DIR = os.path.dirname(os.path.dirname(__file__))
 WEB_DIR = os.path.join(ROOT_DIR, "web")
@@ -52,7 +53,8 @@ class ConnectionManager:
         self.selected_guild_id: Optional[str] = None
         self.default_guild_id: Optional[str] = None  # .env の GUILD_ID（初期選択）
         self.presets: dict[str, dict] = {}  # guild_id -> {name: [{"name","member_ids"}]}
-        self.update_info: Optional[dict] = None  # 新バージョン {"version","url"}（無ければ None）
+        self.update_info: Optional[dict] = None  # 新バージョン情報（無ければ None）
+        self.update_status = "idle"  # idle / downloading / restarting / error:...
         self._lock = asyncio.Lock()
         # GUI（ブラウザ）が全て閉じたらアプリを終了するための仕組み
         self._shutdown_cb = None
@@ -320,6 +322,7 @@ class ConnectionManager:
             "recruiting": bool(ready and gid and self.client.is_recruiting(gid)),
             "pinned_ids": sorted(st.pinned_ids) if st else [],
             "update": self.update_info,
+            "update_status": self.update_status,
         }
 
     async def broadcast(self):
@@ -589,6 +592,37 @@ def create_app(manager: ConnectionManager, runner) -> FastAPI:
         moved = await manager.scatter()
         await manager.broadcast()
         return {"moved": moved}
+
+    # --- 自動アップデート ---
+    @app.post("/api/update/apply")
+    async def update_apply():
+        info = manager.update_info
+        if not info:
+            raise HTTPException(status_code=409, detail="適用できる更新がありません")
+        if not info.get("can_apply"):
+            raise HTTPException(
+                status_code=400,
+                detail="この環境では自動アップデートできません。リリースページから手動で更新してください")
+        if manager.update_status in ("downloading", "restarting"):
+            raise HTTPException(status_code=409, detail="すでにアップデート処理中です")
+        manager.update_status = "downloading"
+        await manager.broadcast()
+        try:
+            await vcm_update.prepare_and_launch(info)
+        except Exception as e:
+            manager.update_status = f"error:{e}"
+            await manager.broadcast()
+            raise HTTPException(status_code=500, detail=f"アップデートに失敗しました: {e}")
+        manager.update_status = "restarting"
+        await manager.broadcast()
+
+        async def shutdown_later():
+            await asyncio.sleep(1.0)  # broadcast とレスポンスを届けてから終了
+            if manager._shutdown_cb:
+                await manager._shutdown_cb()
+
+        asyncio.create_task(shutdown_later())
+        return {"ok": True}
 
     # --- トークン管理 ---
     @app.get("/api/token")
