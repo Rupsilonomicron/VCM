@@ -39,7 +39,7 @@ class GuildState:
         self.teams: dict[int, dict] = {}  # id -> {"id","name","member_ids":[str]}
         self.next_team_id = 1
         self.main_channel_id: Optional[str] = None
-        self.gather_snapshot: dict[str, str] = {}  # user_id -> channel_id
+        self.gather_snapshot: dict[int, str] = {}  # team_id -> 集合直前のチームVC
         self.pinned_ids: set[str] = set()  # シャッフルで動かさないユーザー
 
 
@@ -241,7 +241,7 @@ class ConnectionManager:
         self.state().main_channel_id = channel_id or None
 
     async def gather(self) -> int:
-        """チームに所属するユーザーのうち、メインVC以外にいる人の現在位置を記録し
+        """チームごとに「集合直前にどのVCにいたか」を記録し、チーム所属ユーザーを
         メインVCへ集める。チーム未所属のユーザーは対象外（無関係なVCを巻き込まない）。
         既に集合済み（記録あり）の場合は上書きせず散開を待つ。"""
         st = self.state()
@@ -249,29 +249,35 @@ class ConnectionManager:
             raise HTTPException(status_code=400, detail="メインVCが未設定です")
         if st.gather_snapshot:
             raise HTTPException(status_code=409, detail="すでに集合済みです（散開してください）")
-        team_member_ids = set()
-        for t in st.teams.values():
-            team_member_ids.update(t["member_ids"])
         snap = self.client.snapshot(self.selected_guild_id)
+        location = {m["id"]: ch["id"]
+                    for ch in snap.get("channels", []) for m in ch["members"]}
         st.gather_snapshot = {}
         targets = []
-        for ch in snap.get("channels", []):
-            if ch["id"] == st.main_channel_id:
-                continue
-            for m in ch["members"]:
-                if m["id"] not in team_member_ids:
-                    continue  # チーム未所属は集合させない
-                st.gather_snapshot[m["id"]] = ch["id"]
-                targets.append(m["id"])
+        for t in st.teams.values():
+            # チームのVC = メインVC以外で最も多くのメンバーがいるVC
+            # （個人がはぐれていても、散開時はチームのVCへ合流させる）
+            counts: dict[str, int] = {}
+            for uid in t["member_ids"]:
+                ch = location.get(uid)
+                if ch and ch != st.main_channel_id:
+                    counts[ch] = counts.get(ch, 0) + 1
+                    targets.append(uid)
+            if counts:
+                st.gather_snapshot[t["id"]] = max(counts, key=counts.get)
         return await self.client.move_many(self.selected_guild_id, targets, st.main_channel_id)
 
     async def scatter(self) -> int:
-        """集合直前の位置へ全員を戻す。"""
+        """各チームの全メンバーを、集合直前に記録したチームVCへ移動する。
+        集合後にチームへ加入した人も一緒に移動する。VC未接続の人はスキップ。"""
         st = self.state()
         moved = 0
-        for uid, ch in list(st.gather_snapshot.items()):
-            if await self.client.move_member(self.selected_guild_id, uid, ch):
-                moved += 1
+        for tid, ch in list(st.gather_snapshot.items()):
+            team = st.teams.get(tid)
+            if team is None:
+                continue  # 集合中に削除されたチーム
+            moved += await self.client.move_many(
+                self.selected_guild_id, list(team["member_ids"]), ch)
         st.gather_snapshot = {}
         return moved
 
