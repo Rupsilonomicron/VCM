@@ -41,7 +41,7 @@ ping -n 2 127.0.0.1 >nul
 goto waitloop
 :copy
 robocopy "%VCM_SRC%" "%VCM_DST%" /E /IS /IT /R:3 /W:2 > "%VCM_DST%\update.log" 2>&1
-start "VCM" /D "%VCM_DST%" "%VCM_DST%\start_bot.bat"
+start "VCM" /D "%VCM_DST%" cmd /c "%VCM_DST%\start_bot.bat"
 rd /s /q "%VCM_TMP%" >nul 2>&1
 (goto) 2>nul & del "%~f0"
 """
