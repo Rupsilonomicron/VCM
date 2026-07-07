@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1200px; height: 1200px; overflow: hidden; }
+  body {
+    font-family: "Yu Gothic UI", "Segoe UI", "Meiryo", sans-serif;
+    background:
+      radial-gradient(900px 600px at 85% -10%, rgba(88, 101, 242, 0.55), transparent 65%),
+      radial-gradient(800px 700px at -10% 110%, rgba(59, 165, 93, 0.35), transparent 60%),
+      linear-gradient(160deg, #1e1f22 0%, #242639 55%, #1e1f22 100%);
+    color: #fff;
+    position: relative;
+  }
+  /* うっすら格子模様 */
+  .grid {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.035) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+
+  .content { position: relative; padding: 64px 72px 0; }
+
+  .logo-row { display: flex; align-items: baseline; gap: 24px; }
+  .logo {
+    font-size: 150px; font-weight: 900; letter-spacing: 2px; line-height: 1;
+    background: linear-gradient(120deg, #8b96ff 0%, #5865F2 55%, #4752c4 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 6px 24px rgba(88,101,242,.45));
+  }
+  .subname { font-size: 44px; font-weight: 700; color: #c7cbff; letter-spacing: 1px; }
+
+  .tagline { margin-top: 42px; font-size: 61px; font-weight: 900; line-height: 1.34; }
+  .tagline .em { color: #8b96ff; }
+  .tagline .em2 { color: #57F287; }
+
+  .chips { margin-top: 40px; display: flex; flex-wrap: wrap; gap: 16px; max-width: 980px; }
+  .chip {
+    font-size: 29px; font-weight: 700; color: #e6e8ff;
+    background: rgba(88, 101, 242, 0.18);
+    border: 2px solid rgba(139, 150, 255, 0.55);
+    border-radius: 999px; padding: 10px 26px;
+  }
+  .chip.green { background: rgba(87, 242, 135, 0.10); border-color: rgba(87, 242, 135, 0.5); color: #d9ffe7; }
+
+  .shot-wrap { position: absolute; left: 50%; bottom: -35px; transform: translateX(-50%); width: 1150px; }
+  .shot {
+    width: 100%; border-radius: 18px; display: block;
+    transform: rotate(-2.5deg);
+    border: 3px solid rgba(139, 150, 255, 0.45);
+    box-shadow: 0 30px 90px rgba(0, 0, 0, 0.65), 0 0 120px rgba(88, 101, 242, 0.35);
+  }
+
+  .foot {
+    position: absolute; right: 40px; top: 40px;
+    font-size: 26px; font-weight: 700; color: #9aa0b5;
+    background: rgba(0,0,0,.35); border-radius: 999px; padding: 8px 22px;
+    border: 1px solid rgba(255,255,255,.15);
+  }
+</style>
+</head>
+<body>
+  <div class="grid"></div>
+  <div class="foot">Windows / インストール不要</div>
+  <div class="content">
+    <div class="logo-row">
+      <span class="logo">VCM</span>
+      <span class="subname">VoiceChatMover</span>
+    </div>
+    <div class="tagline">
+      DiscordのVC編成を<span class="em">ドラッグ＆ドロップ</span>で。<br />
+      <span class="em2">VOICEVOX読み上げ</span>もこれ1つ。
+    </div>
+    <div class="chips">
+      <span class="chip">⬇ 一括集合・散開</span>
+      <span class="chip">🔀 チームシャッフル</span>
+      <span class="chip">✋ 参加希望の受付</span>
+      <span class="chip green">🔊 チャット読み上げ</span>
+      <span class="chip green">📖 読み上げ辞書</span>
+    </div>
+  </div>
+  <div class="shot-wrap">
+    <img class="shot" src="gui.png" alt="" />
+  </div>
+</body>
+</html>

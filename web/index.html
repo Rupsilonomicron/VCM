@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VCM - VoiceChatMover</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header>
+    <h1>VCM</h1>
+    <span class="cb-label">サーバー</span>
+    <select id="guild-select" class="guild-select"></select>
+    <span id="status" class="status off">未接続</span>
+    <a id="update-link" class="update-link hidden" target="_blank" rel="noopener"
+       title="クリックでリリースページを開きます"></a>
+    <button id="token-btn" class="btn ghost sm" title="Bot トークンの設定・変更">⚙ トークン設定</button>
+  </header>
+
+  <div id="controlbar">
+    <span class="cb-label">メインVC</span>
+    <select id="main-select"></select>
+    <button id="gather-toggle" class="btn">⬇ 集合</button>
+    <button id="recruit-toggle" class="btn">✋ 参加希望を募る</button>
+    <span class="cb-sep"></span>
+    <span class="cb-label">プリセット</span>
+    <button id="save-preset" class="btn ghost sm">現在の編成を保存</button>
+    <div id="presets" class="presets"></div>
+  </div>
+
+  <div id="ttsbar">
+    <span class="cb-label">読み上げ</span>
+    <span id="tts-engine" class="status off">VOICEVOX 確認中…</span>
+    <span id="tts-controls" class="tts-controls hidden">
+      <button id="tts-skip" class="btn ghost sm">⏭ スキップ</button>
+      <button id="tts-clear" class="btn ghost sm">キュー消去</button>
+      <button id="tts-test" class="btn ghost sm">テスト</button>
+      <span class="cb-sep"></span>
+      <button id="tts-dict" class="btn ghost sm">📖 辞書</button>
+      <span id="tts-now" class="tts-now"></span>
+    </span>
+    <span id="tts-guide" class="tts-guide hidden">
+      VOICEVOX をインストールすると読み上げ機能が使えます:
+      <a href="https://voicevox.hiroshiba.jp/" target="_blank" rel="noopener">公式サイト</a>
+      <button id="tts-redetect" class="btn ghost sm">再検出</button>
+    </span>
+  </div>
+
+  <main>
+    <section id="channels-panel" class="panel">
+      <h2>ボイスチャンネル</h2>
+      <div id="channels" class="board"></div>
+    </section>
+
+    <section id="teams-panel" class="panel">
+      <h2>チーム</h2>
+      <div id="teams" class="board"></div>
+      <div class="team-actions">
+        <button id="add-team" class="btn block">+ チーム追加</button>
+        <button id="shuffle-teams" class="btn" title="チーム所属メンバーをランダムに均等へ振り分け直す（📌ピン留めしたメンバーは動きません）">🔀 シャッフル</button>
+      </div>
+    </section>
+  </main>
+
+  <div id="dict-modal" class="modal hidden">
+    <div class="modal-box">
+      <h2>読み上げ辞書</h2>
+      <p class="modal-desc">
+        単語の読み方を登録します（選択中のサーバーごとに保存）。<br />
+        例: 「VCM」→「ぶいしーえむ」
+      </p>
+      <div class="dict-add">
+        <input id="dict-word" placeholder="単語" spellcheck="false" />
+        <span class="dict-arrow">→</span>
+        <input id="dict-reading" placeholder="読み（ひらがな推奨）" spellcheck="false" />
+        <button id="dict-add-btn" class="btn sm">追加</button>
+      </div>
+      <div id="dict-list" class="dict-list"></div>
+      <div class="modal-actions">
+        <span class="spacer"></span>
+        <button id="dict-close" class="btn ghost">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="token-modal" class="modal hidden">
+    <div class="modal-box">
+      <h2>Bot トークン設定</h2>
+      <p class="modal-desc">
+        Discord Developer Portal で取得した Bot トークンを入力してください。<br />
+        トークンはこの PC 内の <code>config.json</code> にのみ保存され、外部には送信されません。
+      </p>
+      <p id="token-current" class="token-current"></p>
+      <div class="token-row">
+        <input id="token-input" type="password" placeholder="Bot トークンを貼り付け"
+               autocomplete="off" spellcheck="false" />
+        <button id="token-eye" class="btn ghost sm" type="button" title="表示/非表示">👁</button>
+      </div>
+      <p id="token-msg" class="token-msg"></p>
+      <div class="modal-actions">
+        <button id="token-delete" class="btn ghost sm danger hidden">保存済みトークンを削除</button>
+        <span class="spacer"></span>
+        <button id="token-cancel" class="btn ghost">閉じる</button>
+        <button id="token-save" class="btn">保存して接続</button>
+      </div>
+      <details class="token-help">
+        <summary>トークンの取得方法</summary>
+        <ol>
+          <li><a href="https://discord.com/developers/applications" target="_blank" rel="noopener">Discord Developer Portal</a> で New Application → Bot</li>
+          <li>Bot ページの「Reset Token」でトークンを表示してコピー</li>
+          <li>同じページの Privileged Gateway Intents で <b>SERVER MEMBERS INTENT</b> を ON</li>
+          <li>OAuth2 → URL Generator で <code>bot</code> スコープ + 権限
+              <code>Move Members</code> <code>View Channels</code> <code>Send Messages</code>
+              <code>Connect</code> を選び、生成された URL からサーバーに招待</li>
+        </ol>
+      </details>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

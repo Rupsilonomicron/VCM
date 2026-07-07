@@ -1,0 +1,261 @@
+:root {
+  --bg: #1e2127;
+  --panel: #282c34;
+  --card: #323844;
+  --card-hover: #3a4150;
+  --accent: #5865f2;
+  --accent-dim: #4752c4;
+  --text: #e6e6e6;
+  --muted: #9aa0ab;
+  --border: #3a3f4b;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+header h1 { font-size: 20px; margin: 0; color: var(--accent); }
+.guild-select {
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; font-size: 14px;
+  max-width: 280px;
+}
+.status { margin-left: auto; font-size: 13px; padding: 3px 10px; border-radius: 10px; }
+.update-link {
+  font-size: 13px; padding: 3px 10px; border-radius: 10px;
+  background: #2d3a4a; color: #79b8ff; text-decoration: none;
+  border: 1px solid #3d5a80;
+}
+.update-link:hover { background: #38485c; }
+.status.on { background: #2d4a32; color: #7ee787; }
+.status.off { background: #4a2d2d; color: #ff7b72; }
+.status.warn { background: #4a412d; color: #e3c26e; }
+
+#controlbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 20px;
+  background: #21252c;
+  border-bottom: 1px solid var(--border);
+}
+.cb-label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .5px; }
+.cb-sep { width: 1px; height: 22px; background: var(--border); margin: 0 6px; }
+#controlbar select {
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; font-size: 13px;
+}
+#gather-toggle.scatter-mode { background: #2d7d46; }
+#gather-toggle.scatter-mode:hover { background: #266b3c; }
+#recruit-toggle.recruit-mode { background: #9a6b1f; }
+#recruit-toggle.recruit-mode:hover { background: #855c1a; }
+.presets { display: flex; gap: 6px; flex-wrap: wrap; }
+.preset-chip { display: flex; align-items: center; gap: 4px; background: var(--card); border-radius: 14px; padding: 3px 6px 3px 10px; font-size: 12px; }
+.preset-chip button { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 12px; padding: 0 2px; }
+.preset-chip .load { color: var(--text); font-weight: 600; }
+.preset-chip .del:hover { color: #ff7b72; }
+
+#ttsbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 20px;
+  background: #1b1e24;
+  border-bottom: 1px solid var(--border);
+}
+#ttsbar .status { margin-left: 0; }
+.tts-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tts-controls select {
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; font-size: 13px;
+  max-width: 220px;
+}
+.tts-now { color: var(--muted); font-size: 12px; }
+.tts-guide { color: var(--muted); font-size: 13px; display: flex; align-items: center; gap: 8px; }
+.tts-guide a { color: var(--accent); }
+.column.tts-joined { border-color: #2d7d46; box-shadow: 0 0 0 1px #2d7d46 inset; }
+
+/* --- 辞書モーダル --- */
+.dict-add { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.dict-add input {
+  flex: 1; min-width: 0;
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 7px 10px; font-size: 13px;
+}
+.dict-add input:focus { outline: 1px solid var(--accent); }
+.dict-arrow { color: var(--muted); flex: none; }
+.dict-list { max-height: 320px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+.dict-row {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--card); border-radius: 6px; padding: 6px 10px; font-size: 13px;
+}
+.dict-row .dict-w { font-weight: 600; }
+.dict-row .dict-r { flex: 1; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dict-del {
+  background: none; border: none; color: var(--muted); cursor: pointer;
+  font-size: 12px; padding: 0 2px; flex: none;
+}
+.dict-del:hover { color: #ff7b72; }
+
+main {
+  display: flex;
+  gap: 16px;
+  padding: 16px;
+  align-items: flex-start;
+}
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  flex: 1;
+  min-width: 0;
+}
+.panel-head { display: flex; align-items: center; justify-content: space-between; }
+.panel h2 { font-size: 15px; margin: 0 0 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+
+.board { display: flex; flex-wrap: wrap; gap: 12px; }
+
+/* VC のカテゴリー別グループ */
+.cat-groups { display: flex; flex-direction: column; gap: 16px; }
+.vc-category-name {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  margin-bottom: 8px;
+}
+
+.column {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  width: 220px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+}
+.column-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.column-title { font-weight: 600; font-size: 14px; }
+.column-count { color: var(--muted); font-size: 12px; }
+
+.list { min-height: 40px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+
+.member {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--card);
+  border-radius: 6px;
+  padding: 6px 8px;
+  cursor: grab;
+  user-select: none;
+}
+.member:hover { background: var(--card-hover); }
+.member img { width: 26px; height: 26px; border-radius: 50%; background: #555; }
+.member .name { flex: 1; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.member.offline { opacity: .5; }
+.member.selected { outline: 2px solid var(--accent); background: #394264; }
+.member.selected .name::after { content: " ✓"; color: var(--accent); font-weight: 700; }
+.member-remove {
+  background: none; border: none; color: var(--muted); cursor: pointer;
+  font-size: 12px; padding: 0 2px; opacity: 0; flex: none;
+}
+.member:hover .member-remove { opacity: 1; }
+.member-remove:hover { color: #ff7b72; }
+.member-pin {
+  background: none; border: none; cursor: pointer;
+  font-size: 12px; padding: 0 2px; opacity: 0; flex: none;
+  filter: grayscale(1) opacity(.75);
+}
+.member:hover .member-pin { opacity: 1; }
+.member-pin.on { opacity: 1; filter: none; }
+.member.pinned { box-shadow: inset 3px 0 0 #e3c26e; }
+.drag-stack {
+  position: absolute; top: -1000px; left: -1000px;
+  width: 220px; display: flex; flex-direction: column; gap: 6px;
+  padding: 6px; background: var(--panel); border-radius: 8px;
+}
+
+.column-head.draggable-head { cursor: grab; }
+.column-head.draggable-head:active { cursor: grabbing; }
+.column.drop-target { outline: 2px dashed var(--accent); outline-offset: -2px; background: #2a2f3a; }
+
+.btn {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.btn:hover { background: var(--accent-dim); }
+.btn.sm { padding: 3px 8px; font-size: 12px; }
+.btn.block { display: block; width: 100%; padding: 9px 10px; }
+.team-actions { display: flex; gap: 8px; }
+.team-actions .btn.block { flex: 1; }
+.board:not(:empty) + .team-actions { margin-top: 12px; }
+.btn.ghost { background: transparent; color: var(--muted); }
+.btn.ghost:hover { color: var(--text); }
+
+.empty-hint { color: var(--muted); font-size: 12px; text-align: center; padding: 8px 0; }
+
+/* --- トークン設定モーダル --- */
+.hidden { display: none !important; }
+.modal {
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(0, 0, 0, .6);
+  display: flex; align-items: center; justify-content: center;
+}
+.modal-box {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px 22px;
+  width: 480px;
+  max-width: 92vw;
+}
+.modal-box h2 { margin: 0 0 10px; font-size: 16px; }
+.modal-desc { color: var(--muted); font-size: 13px; line-height: 1.6; margin: 0 0 10px; }
+.modal-desc code, .token-help code {
+  background: var(--bg); padding: 1px 5px; border-radius: 4px; font-size: 12px;
+}
+.token-current { font-size: 12px; color: var(--muted); margin: 0 0 8px; }
+.token-row { display: flex; gap: 6px; }
+#token-input {
+  flex: 1;
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 8px 10px; font-size: 13px;
+}
+#token-input:focus { outline: 1px solid var(--accent); }
+.token-msg { font-size: 13px; min-height: 18px; margin: 8px 0 4px; }
+.token-msg.err { color: #ff7b72; }
+.token-msg.okmsg { color: #7ee787; }
+.modal-actions { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.modal-actions .spacer { flex: 1; }
+.btn.danger { color: #ff7b72; }
+.btn.danger:hover { color: #ff9a93; }
+.btn:disabled { opacity: .5; cursor: default; }
+.token-help { margin-top: 14px; font-size: 12px; color: var(--muted); }
+.token-help summary { cursor: pointer; }
+.token-help ol { margin: 8px 0 0; padding-left: 20px; line-height: 1.8; }
+.token-help a { color: var(--accent); }
