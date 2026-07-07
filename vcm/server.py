@@ -36,10 +36,12 @@ class GuildState:
     """1サーバー分の作業状態。"""
 
     def __init__(self):
-        self.teams: dict[int, dict] = {}  # id -> {"id","name","member_ids":[str]}
+        # teams: id -> {"id","name","member_ids":[str],"home_channel_id":str|None}
+        # home_channel_id = 散開先VC（チーム見出しをVCへD&Dした最後の記録）
+        self.teams: dict[int, dict] = {}
         self.next_team_id = 1
         self.main_channel_id: Optional[str] = None
-        self.gather_snapshot: dict[int, str] = {}  # team_id -> 集合直前のチームVC
+        self.gathered = False  # 集合済みか（トグル表示用）
         self.pinned_ids: set[str] = set()  # シャッフルで動かさないユーザー
 
 
@@ -129,7 +131,8 @@ class ConnectionManager:
     def save_preset(self, name: str):
         st = self.state()
         self._guild_presets()[name] = [
-            {"name": t["name"], "member_ids": list(t["member_ids"])}
+            {"name": t["name"], "member_ids": list(t["member_ids"]),
+             "home_channel_id": t.get("home_channel_id")}
             for t in st.teams.values()
         ]
         self._save_presets()
@@ -144,6 +147,7 @@ class ConnectionManager:
         for t in preset:
             team = self.create_team(t["name"])
             team["member_ids"] = list(t["member_ids"])
+            team["home_channel_id"] = t.get("home_channel_id")  # 旧形式プリセットは None
 
     def delete_preset(self, name: str):
         gp = self._guild_presets()
@@ -156,9 +160,14 @@ class ConnectionManager:
         st = self.state()
         tid = st.next_team_id
         st.next_team_id += 1
-        team = {"id": tid, "name": name or f"Team {tid}", "member_ids": []}
+        team = {"id": tid, "name": name or f"Team {tid}",
+                "member_ids": [], "home_channel_id": None}
         st.teams[tid] = team
         return team
+
+    def set_team_home(self, team_id: int, channel_id: str):
+        """チームの散開先VCを記録する（チーム見出しのD&D移動時に呼ばれる）。"""
+        self._require_team(team_id)["home_channel_id"] = channel_id
 
     def rename_team(self, team_id: int, name: str):
         self._require_team(team_id)["name"] = name
@@ -241,44 +250,42 @@ class ConnectionManager:
         self.state().main_channel_id = channel_id or None
 
     async def gather(self) -> int:
-        """チームごとに「集合直前にどのVCにいたか」を記録し、チーム所属ユーザーを
-        メインVCへ集める。チーム未所属のユーザーは対象外（無関係なVCを巻き込まない）。
-        既に集合済み（記録あり）の場合は上書きせず散開を待つ。"""
+        """チームに所属するユーザーをメインVCへ集める。
+        チーム未所属のユーザーは対象外（無関係なVCを巻き込まない）。"""
         st = self.state()
         if not st.main_channel_id:
             raise HTTPException(status_code=400, detail="メインVCが未設定です")
-        if st.gather_snapshot:
+        if st.gathered:
             raise HTTPException(status_code=409, detail="すでに集合済みです（散開してください）")
         snap = self.client.snapshot(self.selected_guild_id)
         location = {m["id"]: ch["id"]
                     for ch in snap.get("channels", []) for m in ch["members"]}
-        st.gather_snapshot = {}
-        targets = []
-        for t in st.teams.values():
-            # チームのVC = メインVC以外で最も多くのメンバーがいるVC
-            # （個人がはぐれていても、散開時はチームのVCへ合流させる）
-            counts: dict[str, int] = {}
-            for uid in t["member_ids"]:
-                ch = location.get(uid)
-                if ch and ch != st.main_channel_id:
-                    counts[ch] = counts.get(ch, 0) + 1
-                    targets.append(uid)
-            if counts:
-                st.gather_snapshot[t["id"]] = max(counts, key=counts.get)
-        return await self.client.move_many(self.selected_guild_id, targets, st.main_channel_id)
+        targets = [
+            uid
+            for t in st.teams.values() for uid in t["member_ids"]
+            if location.get(uid) and location[uid] != st.main_channel_id
+        ]
+        moved = await self.client.move_many(
+            self.selected_guild_id, targets, st.main_channel_id)
+        st.gathered = True
+        return moved
 
     async def scatter(self) -> int:
-        """各チームの全メンバーを、集合直前に記録したチームVCへ移動する。
-        集合後にチームへ加入した人も一緒に移動する。VC未接続の人はスキップ。"""
+        """各チームの全メンバーを、記録済みの散開先VC（home_channel_id）へ移動する。
+        散開先はチーム見出しをVCへD&Dしたときに記録される。未記録のチームはスキップ。"""
         st = self.state()
+        if not any(t.get("home_channel_id") for t in st.teams.values()):
+            raise HTTPException(
+                status_code=400,
+                detail="散開先が記録されていません（チーム見出しをVCへドラッグすると記録されます）")
         moved = 0
-        for tid, ch in list(st.gather_snapshot.items()):
-            team = st.teams.get(tid)
-            if team is None:
-                continue  # 集合中に削除されたチーム
+        for t in st.teams.values():
+            home = t.get("home_channel_id")
+            if not home:
+                continue
             moved += await self.client.move_many(
-                self.selected_guild_id, list(team["member_ids"]), ch)
-        st.gather_snapshot = {}
+                self.selected_guild_id, list(t["member_ids"]), home)
+        st.gathered = False
         return moved
 
     # --- snapshot / broadcast -----------------------------------------------
@@ -298,7 +305,8 @@ class ConnectionManager:
         if st:
             for t in st.teams.values():
                 members = [index.get(uid) or self.client.member_info(gid, uid) for uid in t["member_ids"]]
-                teams.append({"id": t["id"], "name": t["name"], "members": members})
+                teams.append({"id": t["id"], "name": t["name"], "members": members,
+                              "home_channel_id": t.get("home_channel_id")})
 
         tts = {
             "engine": self.engine.state if self.engine else "off",
@@ -324,7 +332,7 @@ class ConnectionManager:
             "teams": teams,
             "main_channel_id": st.main_channel_id if st else None,
             "preset_names": sorted(self.presets.get(gid, {}).keys()) if gid else [],
-            "can_scatter": bool(st.gather_snapshot) if st else False,
+            "can_scatter": st.gathered if st else False,
             "recruiting": bool(ready and gid and self.client.is_recruiting(gid)),
             "pinned_ids": sorted(st.pinned_ids) if st else [],
             "update": self.update_info,
@@ -526,6 +534,8 @@ def create_app(manager: ConnectionManager, runner) -> FastAPI:
     async def move_team(team_id: int, body: MoveTeam):
         team = manager._require_team(team_id)
         moved = await client().move_many(manager.selected_guild_id, list(team["member_ids"]), body.channel_id)
+        # D&Dでの移動先をチームの散開先VCとして記録（移動人数0でも意図として記録する）
+        manager.set_team_home(team_id, body.channel_id)
         await manager.broadcast()
         return {"moved": moved}
 

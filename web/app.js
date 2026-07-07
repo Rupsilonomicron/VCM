@@ -329,6 +329,9 @@ function renderControls() {
   gatherToggleBtn.classList.toggle("scatter-mode", gathered);
   // メインVC未設定時は集合できない
   gatherToggleBtn.disabled = !gathered && !lastSnapshot.main_channel_id;
+  gatherToggleBtn.title = gathered
+    ? "各チームを散開先VC（⛺表示のVC）へ移動します"
+    : "チーム所属メンバー全員をメインVCへ移動します";
 
   // 参加希望トグル: 募集中なら「締め切る」。メインVCとチームが揃うまで押せない
   const recruiting = !!lastSnapshot.recruiting;
@@ -444,6 +447,13 @@ function render() {
   // VC 列（カテゴリー別にグループ表示。カテゴリーが無いサーバーは従来通りフラット表示）
   channelsEl.innerHTML = "";
   const chs = lastSnapshot.channels || [];
+  // 散開先バッジ: channel_id -> そのVCを散開先にしているチーム名
+  const homeTeams = {};
+  (lastSnapshot.teams || []).forEach((t) => {
+    if (t.home_channel_id) {
+      (homeTeams[t.home_channel_id] = homeTeams[t.home_channel_id] || []).push(t.name);
+    }
+  });
   const hasCategories = chs.some((c) => c.category_id);
   channelsEl.classList.toggle("board", !hasCategories);
   channelsEl.classList.toggle("cat-groups", hasCategories);
@@ -454,6 +464,13 @@ function render() {
     if (lastSnapshot.tts && lastSnapshot.tts.channel_id === ch.id) {
       col.classList.add("tts-joined");
       head.querySelector(".column-title").textContent = `🔊 ${ch.name}`;
+    }
+    if (homeTeams[ch.id]) {
+      const badge = document.createElement("div");
+      badge.className = "vc-home";
+      badge.textContent = `⛺ ${homeTeams[ch.id].join("、")}`;
+      badge.title = "このVCを散開先にしているチーム（チーム見出しをVCへドラッグすると記録されます）";
+      col.insertBefore(badge, list);
     }
     ch.members.forEach((m) => list.appendChild(memberCard(m)));
     enableDrop(col, "vc", ch.id);

@@ -153,6 +153,10 @@ main {
   flex-direction: column;
 }
 .column-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.vc-home {
+  color: #e3c26e; font-size: 11px; margin: -4px 0 6px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .column-title { font-weight: 600; font-size: 14px; }
 .column-count { color: var(--muted); font-size: 12px; }
 
