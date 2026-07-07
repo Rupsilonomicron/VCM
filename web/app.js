@@ -62,7 +62,15 @@ function connect() {
 // アップデートの再起動後、サーバーが戻ったらページごと再読み込みして
 // 新しいバージョンのGUI（HTML/JS/CSS）に切り替える
 function waitForRestart() {
+  let tries = 0;
   const timer = setInterval(async () => {
+    if (++tries > 180) {  // 3分待っても戻らなければ諦めて案内を出す
+      clearInterval(timer);
+      updateMsgEl.textContent =
+        "再起動を確認できませんでした。アプリを起動し直してからページを再読み込みしてください。";
+      updateMsgEl.className = "token-msg err";
+      return;
+    }
     try {
       const res = await fetch("/", { cache: "no-store" });
       if (res.ok) {
@@ -226,7 +234,7 @@ function memberCard(m, teamId) {
   div.className = "member" + (m.voice_channel_id ? "" : " offline") +
     (selectedIds.has(m.id) ? " selected" : "");
   div.dataset.userId = m.id;
-  div.innerHTML = `<img src="${m.avatar || ""}" alt=""><span class="name">${escapeHtml(m.name)}</span>`;
+  div.innerHTML = `<img src="${escapeHtml(m.avatar || "")}" alt=""><span class="name">${escapeHtml(m.name)}</span>`;
   div.addEventListener("click", () => toggleSelect(m.id, div));
   // ネイティブD&D: ドラッグ中にDOMを動かさず、ドロップ時にだけ確定する
   div.draggable = true;

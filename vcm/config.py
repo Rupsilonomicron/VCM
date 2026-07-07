@@ -8,8 +8,10 @@ config.json のキー:
   discord_token  Bot トークン（GUI から設定・編集・削除）
   guild_id       初期選択サーバーの Guild ID（省略可。空なら最初のサーバー）
   host / port    ローカル GUI の待受アドレス（省略時 127.0.0.1:8765）
+                 ※ host は 127.0.0.1 のまま使うこと。0.0.0.0 等に変えると
+                   認証なしの全機能（トークン設定含む）がネットワークに公開される。
   voicevox_path  VOICEVOX の実行ファイル/フォルダ（省略時は自動検出）
-  github_repo    更新確認先の GitHub リポジトリ "owner/repo"（省略時は確認しない）
+  github_repo    更新確認先の GitHub リポジトリ "owner/repo"（省略時は既定リポジトリ）
 """
 
 import json
@@ -29,9 +31,16 @@ def load_config() -> dict:
         return {}
 
 
+def save_json_atomic(path: str, data):
+    """一時ファイルに書いてから置き換える（書き込み中のクラッシュで設定を失わない）。"""
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, path)
+
+
 def save_config(config: dict):
-    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-        json.dump(config, f, ensure_ascii=False, indent=2)
+    save_json_atomic(CONFIG_PATH, config)
 
 
 # --- トークン -----------------------------------------------------------------

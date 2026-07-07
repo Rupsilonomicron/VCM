@@ -202,6 +202,7 @@ class VCMClient(discord.Client):
         else:
             reader.channel_id = channel.id  # 読み上げ対象を移動先VCに切替
             reader.clear()
+            reader.skip()  # 前のVCで再生中の1件も打ち切る
         await self._on_change()
         return True
 

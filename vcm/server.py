@@ -16,10 +16,11 @@ import asyncio
 import json
 import os
 import random
+import re
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -30,6 +31,36 @@ from vcm import update as vcm_update
 ROOT_DIR = os.path.dirname(os.path.dirname(__file__))
 WEB_DIR = os.path.join(ROOT_DIR, "web")
 PRESETS_PATH = os.path.join(ROOT_DIR, "presets.json")
+
+# --- ローカルオリジンガード ------------------------------------------------------
+# VCM は認証を持たないローカルツールのため、ブラウザ上の悪意ある Web ページからの
+# アクセス（CSRF / WebSocket 経由の情報窃取）を Origin / Host ヘッダーで遮断する。
+_LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1", "[::1]"}
+
+
+def _header_host(value: Optional[str]) -> Optional[str]:
+    """"127.0.0.1:8765" や "[::1]:8765" からホスト部を取り出す。"""
+    if not value:
+        return None
+    m = re.match(r"^(\[[^\]]+\]|[^:]+)", value.strip())
+    return m.group(1).lower() if m else None
+
+
+def origin_allowed(origin: Optional[str]) -> bool:
+    """Origin ヘッダーが無い（ブラウザ以外・同一オリジンGET等）か、localhost なら許可。"""
+    if not origin:
+        return True
+    m = re.match(r"^https?://(\[[^\]]+\]|[^/:]+)(:\d+)?$", origin.strip())
+    return bool(m) and m.group(1).lower() in _LOCAL_HOSTS
+
+
+def host_allowed(host_header: Optional[str]) -> bool:
+    """Host ヘッダーが localhost 系か（DNSリバインディング対策）。
+    config.json の host を書き換えて LAN 公開している場合はチェックしない。"""
+    if vcm_config.get_host() not in ("127.0.0.1", "localhost", "::1"):
+        return True  # 利用者が明示的に外部公開した構成では Host を縛れない
+    h = _header_host(host_header)
+    return h is None or h in _LOCAL_HOSTS
 
 
 class GuildState:
@@ -121,8 +152,7 @@ class ConnectionManager:
             self._save_presets()
 
     def _save_presets(self):
-        with open(PRESETS_PATH, "w", encoding="utf-8") as f:
-            json.dump(self.presets, f, ensure_ascii=False, indent=2)
+        vcm_config.save_json_atomic(PRESETS_PATH, self.presets)
 
     def _guild_presets(self) -> dict:
         self._ensure_selected()
@@ -356,7 +386,8 @@ class ConnectionManager:
         await ws.accept()
         self.active.add(ws)
         # 再接続（リロード等）があったらシャットダウン予約を取り消す
-        if self._shutdown_task and not self._shutdown_task.done():
+        # （完了済みタスクも None に戻す。残すと以後の終了予約が二度と入らない）
+        if self._shutdown_task:
             self._shutdown_task.cancel()
             self._shutdown_task = None
         await ws.send_text(json.dumps(self.build_snapshot()))
@@ -364,7 +395,8 @@ class ConnectionManager:
     def disconnect(self, ws: WebSocket):
         self.active.discard(ws)
         # GUI が全て閉じたら猶予後に終了予約
-        if not self.active and self._shutdown_cb and self._shutdown_task is None:
+        if not self.active and self._shutdown_cb and (
+                self._shutdown_task is None or self._shutdown_task.done()):
             self._shutdown_task = asyncio.create_task(self._maybe_shutdown())
 
     def set_shutdown(self, callback):
@@ -460,12 +492,25 @@ def create_app(manager: ConnectionManager, runner) -> FastAPI:
         resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         return resp
 
+    @app.middleware("http")
+    async def local_origin_guard(request, call_next):
+        # 悪意ある Web ページからの CSRF（クロスオリジンPOST等）とDNSリバインディングを遮断
+        if not origin_allowed(request.headers.get("origin")) or \
+                not host_allowed(request.headers.get("host")):
+            return JSONResponse(status_code=403, content={"detail": "forbidden origin"})
+        return await call_next(request)
+
     @app.get("/")
     def index():
         return FileResponse(os.path.join(WEB_DIR, "index.html"))
 
     @app.websocket("/ws")
     async def ws_endpoint(websocket: WebSocket):
+        # WebSocket は CORS の対象外のため、Origin を自前で検証してから受け入れる
+        if not origin_allowed(websocket.headers.get("origin")) or \
+                not host_allowed(websocket.headers.get("host")):
+            await websocket.close(code=1008)  # accept 前の close はハンドシェイク拒否になる
+            return
         await manager.connect(websocket)
         try:
             while True:

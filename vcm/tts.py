@@ -17,6 +17,8 @@ from typing import Optional
 
 import discord
 
+from vcm import config as vcm_config
+
 ROOT_DIR = os.path.dirname(os.path.dirname(__file__))
 TTS_STORE_PATH = os.path.join(ROOT_DIR, "tts.json")
 
@@ -42,8 +44,7 @@ def _load_store() -> dict:
 
 
 def _save_store(store: dict):
-    with open(TTS_STORE_PATH, "w", encoding="utf-8") as f:
-        json.dump(store, f, ensure_ascii=False, indent=2)
+    vcm_config.save_json_atomic(TTS_STORE_PATH, store)
 
 
 def get_user_voice(user_id) -> int:
