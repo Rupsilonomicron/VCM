@@ -267,18 +267,6 @@ settingsSaveBtn.onclick = async () => {
   }
 };
 
-const setVvBrowseBtn = document.getElementById("set-vvbrowse");
-setVvBrowseBtn.onclick = async () => {
-  const prev = setVvBrowseBtn.textContent;
-  setVvBrowseBtn.disabled = true;
-  setVvBrowseBtn.textContent = "選択中…";
-  const res = await api("POST", "/api/settings/browse-voicevox",
-    { initial: setVvPathEl.value.trim() });
-  setVvBrowseBtn.disabled = false;
-  setVvBrowseBtn.textContent = prev;
-  if (res && res.path) setVvPathEl.value = res.path;  // キャンセル時は変更しない
-};
-
 document.getElementById("settings-btn").onclick = openSettings;
 document.getElementById("settings-cancel").onclick = () => settingsModalEl.classList.add("hidden");
 document.getElementById("open-token-btn").onclick = () => {

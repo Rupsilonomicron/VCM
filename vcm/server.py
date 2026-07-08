@@ -25,7 +25,6 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from vcm import config as vcm_config
-from vcm import dialogs as vcm_dialogs
 from vcm import tts as tts_store
 from vcm import update as vcm_update
 
@@ -471,10 +470,6 @@ class Settings(BaseModel):
     voicevox_path: Optional[str] = None
 
 
-class BrowseFolder(BaseModel):
-    initial: Optional[str] = None
-
-
 class TtsTest(BaseModel):
     text: Optional[str] = None
 
@@ -701,12 +696,6 @@ def create_app(manager: ConnectionManager, runner) -> FastAPI:
     @app.get("/api/settings")
     def get_settings():
         return {**vcm_config.settings_info(), "running_port": manager.runtime_port}
-
-    @app.post("/api/settings/browse-voicevox")
-    async def browse_voicevox(body: BrowseFolder):
-        # 利用者のPCで OS 標準のフォルダ選択ダイアログを開く（origin ガード配下）
-        path = await vcm_dialogs.pick_folder(body.initial)
-        return {"path": path}
 
     @app.post("/api/settings")
     async def update_settings(body: Settings):
