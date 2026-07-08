@@ -1,4 +1,4 @@
-# VCM — VoiceChatMover v1.4.2
+# VCM — VoiceChatMover v1.5.0
 
 大会やイベントで、メインVC ⇄ チーム別VC の分散・集合をブラウザGUIから素早く行うための
 Discord bot（ローカル起動・自分用）。
@@ -50,9 +50,13 @@ Discord bot（ローカル起動・自分用）。
 4. OAuth2 → URL Generator で `bot` + `applications.commands` スコープ、
    権限 `View Channels` `Send Messages` `Connect` `Speak` `Move Members` を付与し、サーバーに招待
 
-### 設定（config.json・すべて省略可）
+### 設定
 
-トークン設定時に自動生成されます。必要に応じて以下のキーを追記:
+ポート・起動時サーバー・VOICEVOX の場所・Bot トークンは、ヘッダーの
+**「⚙ 設定」** から変更できます（`config.json` を直接編集する必要はありません）。
+
+以下は `config.json` を直接編集する場合のキー一覧（すべて省略可）。トークン設定時に
+自動生成されます。
 
 | キー | 内容 |
 | --- | --- |

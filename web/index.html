@@ -14,7 +14,7 @@
     <span id="status" class="status off">未接続</span>
     <a id="update-link" class="update-link hidden" target="_blank" rel="noopener"
        title="クリックでリリースページを開きます"></a>
-    <button id="token-btn" class="btn ghost sm" title="Bot トークンの設定・変更">⚙ トークン設定</button>
+    <button id="settings-btn" class="btn ghost sm" title="トークン・ポート・VOICEVOX の設定">⚙ 設定</button>
   </header>
 
   <div id="controlbar">
@@ -97,6 +97,37 @@
         <span class="spacer"></span>
         <button id="update-cancel" class="btn ghost">あとで</button>
         <button id="update-apply" class="btn">アップデートして再起動</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="settings-modal" class="modal hidden">
+    <div class="modal-box">
+      <h2>設定</h2>
+      <p class="modal-desc">
+        変更内容は保存するとすぐに反映されます（ポートの変更のみ再起動が必要）。
+      </p>
+      <div class="setting-row">
+        <label for="set-guild">起動時に選ぶサーバー</label>
+        <select id="set-guild"></select>
+      </div>
+      <div class="setting-row">
+        <label for="set-port">ポート番号</label>
+        <input id="set-port" type="number" min="1" max="65535" />
+      </div>
+      <div class="setting-row">
+        <label for="set-vvpath">VOICEVOX の場所</label>
+        <input id="set-vvpath" placeholder="自動検出（通常は空欄でOK）" spellcheck="false" />
+      </div>
+      <p class="setting-hint">
+        VOICEVOX が自動で見つからないときだけ、インストール先フォルダを指定してください。
+      </p>
+      <p id="settings-msg" class="token-msg"></p>
+      <div class="modal-actions">
+        <button id="open-token-btn" class="btn ghost sm">🔑 Bot トークンの設定・変更</button>
+        <span class="spacer"></span>
+        <button id="settings-cancel" class="btn ghost">閉じる</button>
+        <button id="settings-save" class="btn">保存</button>
       </div>
     </div>
   </div>

@@ -90,6 +90,12 @@ class VoicevoxEngine:
             return
         self._detect_task = asyncio.create_task(self._detect())
 
+    def set_config_path(self, path: Optional[str]):
+        """VOICEVOX の手動指定パスを差し替える（GUI 設定変更時）。
+        呼び出し後に start_detection() で新パスを反映する。"""
+        self._config_path = (path or "").strip() or None
+        self._speakers_cache = None  # 別エンジンに切り替わる可能性があるので破棄
+
     async def _alive(self) -> bool:
         try:
             async with self.session().get(

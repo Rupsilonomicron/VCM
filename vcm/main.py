@@ -35,6 +35,7 @@ async def main():
 
     manager = ConnectionManager()
     manager.default_guild_id = default_guild_id
+    manager.runtime_port = port  # 設定画面でのポート変更→再起動要否の判定に使う
     manager.migrate_legacy_presets()
 
     engine = VoicevoxEngine(

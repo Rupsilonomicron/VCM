@@ -100,3 +100,38 @@ def get_voicevox_path() -> Optional[str]:
 def get_github_repo() -> Optional[str]:
     """更新確認先の GitHub リポジトリ（"owner/repo" または URL）。"""
     return str(load_config().get("github_repo") or "").strip() or None
+
+
+# --- GUI から編集する設定 -------------------------------------------------------
+def settings_info() -> dict:
+    """GUI の設定画面に表示する現在値（トークン・host は含めない）。"""
+    c = load_config()
+    return {
+        "guild_id": str(c.get("guild_id") or "").strip(),
+        "port": get_port(),
+        "voicevox_path": str(c.get("voicevox_path") or "").strip(),
+    }
+
+
+def save_settings(guild_id: Optional[str] = None,
+                  port: Optional[int] = None,
+                  voicevox_path: Optional[str] = None):
+    """GUI から渡された設定を config.json に反映する。
+    None のフィールドは変更しない。空文字はそのキーの削除（＝既定に戻す）。
+    host は安全のため GUI からは変更させない（ここでも受け付けない）。"""
+    c = load_config()
+    if guild_id is not None:
+        gid = str(guild_id).strip()
+        if gid:
+            c["guild_id"] = gid
+        else:
+            c.pop("guild_id", None)
+    if port is not None:
+        c["port"] = int(port)
+    if voicevox_path is not None:
+        vp = str(voicevox_path).strip()
+        if vp:
+            c["voicevox_path"] = vp
+        else:
+            c.pop("voicevox_path", None)
+    save_config(c)

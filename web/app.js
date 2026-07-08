@@ -210,11 +210,70 @@ tokenDeleteBtn.onclick = async () => {
 };
 
 tokenCancelBtn.onclick = closeTokenModal;
-document.getElementById("token-btn").onclick = () => { tokenAutoOpened = true; openTokenModal(false); };
 document.getElementById("token-eye").onclick = () => {
   tokenInputEl.type = tokenInputEl.type === "password" ? "text" : "password";
 };
 tokenInputEl.addEventListener("keydown", (e) => { if (e.key === "Enter") tokenSaveBtn.click(); });
+
+// --- 設定モーダル --------------------------------------------------------
+const settingsModalEl = document.getElementById("settings-modal");
+const setGuildEl = document.getElementById("set-guild");
+const setPortEl = document.getElementById("set-port");
+const setVvPathEl = document.getElementById("set-vvpath");
+const settingsMsgEl = document.getElementById("settings-msg");
+const settingsSaveBtn = document.getElementById("settings-save");
+
+function showSettingsMsg(text, kind) {
+  settingsMsgEl.textContent = text;
+  settingsMsgEl.className = "token-msg" + (kind ? ` ${kind}` : "");
+}
+
+async function openSettings() {
+  // 起動時に選ぶサーバーの選択肢を現在の参加サーバーから作る
+  const guilds = lastSnapshot.guilds || [];
+  setGuildEl.innerHTML = `<option value="">最初のサーバー（自動）</option>` +
+    guilds.map((g) => `<option value="${g.id}">${escapeHtml(g.name)}</option>`).join("");
+  showSettingsMsg("");
+  settingsModalEl.classList.remove("hidden");
+  const info = await api("GET", "/api/settings");
+  if (info) {
+    setGuildEl.value = info.guild_id || "";
+    setPortEl.value = info.port;
+    setVvPathEl.value = info.voicevox_path || "";
+  }
+}
+
+settingsSaveBtn.onclick = async () => {
+  const port = parseInt(setPortEl.value, 10);
+  if (!(port >= 1 && port <= 65535)) {
+    showSettingsMsg("ポート番号は 1〜65535 で指定してください", "err");
+    return;
+  }
+  settingsSaveBtn.disabled = true;
+  const res = await api("POST", "/api/settings", {
+    guild_id: setGuildEl.value,
+    port,
+    voicevox_path: setVvPathEl.value.trim(),
+  });
+  settingsSaveBtn.disabled = false;
+  if (res && res.ok) {
+    showSettingsMsg(
+      res.restart_required
+        ? "保存しました。ポートの変更は次回起動時に反映されます。"
+        : "保存しました ✓",
+      "okmsg");
+  } else {
+    showSettingsMsg("保存に失敗しました", "err");
+  }
+};
+
+document.getElementById("settings-btn").onclick = openSettings;
+document.getElementById("settings-cancel").onclick = () => settingsModalEl.classList.add("hidden");
+document.getElementById("open-token-btn").onclick = () => {
+  settingsModalEl.classList.add("hidden");
+  tokenAutoOpened = true;
+  openTokenModal(false);
+};
 
 // bot が使えない状態なら設定モーダルを自動で開く
 function maybeOpenTokenModal() {

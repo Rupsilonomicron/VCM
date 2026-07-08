@@ -88,6 +88,7 @@ class ConnectionManager:
         self.presets: dict[str, dict] = {}  # guild_id -> {name: [{"name","member_ids"}]}
         self.update_info: Optional[dict] = None  # 新バージョン情報（無ければ None）
         self.update_status = "idle"  # idle / downloading / restarting / error:...
+        self.runtime_port: Optional[int] = None  # 起動時に待ち受けているポート（再起動要否判定用）
         self._lock = asyncio.Lock()
         # GUI（ブラウザ）が全て閉じたらアプリを終了するための仕組み
         self._shutdown_cb = None
@@ -463,6 +464,12 @@ class SetToken(BaseModel):
     token: str
 
 
+class Settings(BaseModel):
+    guild_id: Optional[str] = None
+    port: Optional[int] = None
+    voicevox_path: Optional[str] = None
+
+
 class TtsTest(BaseModel):
     text: Optional[str] = None
 
@@ -684,6 +691,30 @@ def create_app(manager: ConnectionManager, runner) -> FastAPI:
 
         asyncio.create_task(shutdown_later())
         return {"ok": True}
+
+    # --- 設定（GUI から編集） ---
+    @app.get("/api/settings")
+    def get_settings():
+        return {**vcm_config.settings_info(), "running_port": manager.runtime_port}
+
+    @app.post("/api/settings")
+    async def update_settings(body: Settings):
+        if body.port is not None and not (1 <= body.port <= 65535):
+            raise HTTPException(status_code=400, detail="ポート番号は 1〜65535 で指定してください")
+        old_vv = vcm_config.get_voicevox_path()
+        vcm_config.save_settings(
+            guild_id=body.guild_id, port=body.port, voicevox_path=body.voicevox_path)
+        # VOICEVOX パスが変わったら即座に再検出（再起動不要）
+        new_vv = vcm_config.get_voicevox_path()
+        if new_vv != old_vv and manager.engine:
+            manager.engine.set_config_path(new_vv)
+            manager.engine.start_detection()
+        # ポート変更は再起動しないと反映されない
+        restart_required = bool(
+            body.port is not None and manager.runtime_port
+            and body.port != manager.runtime_port)
+        await manager.broadcast()
+        return {"ok": True, "restart_required": restart_required}
 
     # --- トークン管理 ---
     @app.get("/api/token")
