@@ -197,6 +197,11 @@ main {
   width: 220px; display: flex; flex-direction: column; gap: 6px;
   padding: 6px; background: var(--panel); border-radius: 8px;
 }
+#rubber-band {
+  position: fixed; z-index: 50; display: none; pointer-events: none;
+  border: 1px solid var(--accent); background: rgba(88, 101, 242, .15);
+  border-radius: 2px;
+}
 
 .column-head.draggable-head { cursor: grab; }
 .column-head.draggable-head:active { cursor: grabbing; }

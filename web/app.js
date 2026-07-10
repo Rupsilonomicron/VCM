@@ -634,6 +634,85 @@ function enableDrop(col, kind, id) {
   });
 }
 
+// --- ドラッグ範囲選択（ラバーバンド） -------------------------------------
+// パネルの余白からドラッグで枠を描き、枠に触れたメンバーカードを一括選択する。
+// Ctrl/Shift 押下で既存の選択に追加。余白をクリック（ドラッグなし）で全解除。
+// メンバーカード上からのドラッグは従来どおり D&D 移動なので開始点を余白に限る。
+const rubberEl = document.createElement("div");
+rubberEl.id = "rubber-band";
+document.body.appendChild(rubberEl);
+
+let rubber = null;  // {x, y, base:Set, moved} ドラッグ中だけ存在
+
+function rubberZone(target) {
+  if (target.closest(".member, button, select, input, a, .column-head, .modal")) return false;
+  return !!target.closest("#channels-panel, #teams-panel");
+}
+
+function rubberRect(st, e) {
+  return {
+    left: Math.min(st.x, e.clientX),
+    top: Math.min(st.y, e.clientY),
+    right: Math.max(st.x, e.clientX),
+    bottom: Math.max(st.y, e.clientY),
+  };
+}
+
+function rubberIds(st, rect) {
+  const ids = new Set(st.base);
+  document.querySelectorAll(".member[data-user-id]").forEach((el) => {
+    const r = el.getBoundingClientRect();
+    if (r.left < rect.right && r.right > rect.left &&
+        r.top < rect.bottom && r.bottom > rect.top) {
+      ids.add(el.dataset.userId);
+    }
+  });
+  return ids;
+}
+
+document.addEventListener("mousedown", (e) => {
+  if (e.button !== 0 || !rubberZone(e.target)) return;
+  e.preventDefault();  // テキスト選択を開始させない
+  rubber = {
+    x: e.clientX, y: e.clientY,
+    base: (e.ctrlKey || e.shiftKey) ? new Set(selectedIds) : new Set(),
+    moved: false,
+  };
+});
+
+document.addEventListener("mousemove", (e) => {
+  if (!rubber) return;
+  if (!rubber.moved) {
+    if (Math.abs(e.clientX - rubber.x) < 5 && Math.abs(e.clientY - rubber.y) < 5) return;
+    rubber.moved = true;  // 5px 動いたらドラッグ扱い（クリックと区別）
+    rubberEl.style.display = "block";
+  }
+  const rect = rubberRect(rubber, e);
+  rubberEl.style.left = `${rect.left}px`;
+  rubberEl.style.top = `${rect.top}px`;
+  rubberEl.style.width = `${rect.right - rect.left}px`;
+  rubberEl.style.height = `${rect.bottom - rect.top}px`;
+  const ids = rubberIds(rubber, rect);
+  document.querySelectorAll(".member[data-user-id]").forEach((el) => {
+    el.classList.toggle("selected", ids.has(el.dataset.userId));
+  });
+});
+
+document.addEventListener("mouseup", (e) => {
+  if (!rubber) return;
+  const st = rubber;
+  rubber = null;
+  rubberEl.style.display = "none";
+  if (!st.moved) {
+    if (selectedIds.size) { selectedIds.clear(); render(); }  // 余白クリック = 全解除
+    return;
+  }
+  const ids = rubberIds(st, rubberRect(st, e));
+  selectedIds.clear();
+  ids.forEach((id) => selectedIds.add(id));
+  render();
+});
+
 // --- 操作 --------------------------------------------------------------
 document.getElementById("add-team").onclick = async () => {
   const name = prompt("チーム名", "");
