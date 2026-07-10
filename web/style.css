@@ -203,6 +203,38 @@ main {
   border-radius: 2px;
 }
 
+/* --- チュートリアル --- */
+.demo-badge {
+  font-size: 13px; padding: 3px 6px 3px 12px; border-radius: 10px;
+  background: #4a3b1e; color: #e3c26e; border: 1px solid #6b5527;
+  display: inline-flex; align-items: center; gap: 10px;
+}
+.demo-badge .btn { padding: 2px 10px; font-size: 12px; }
+#tour-highlight {
+  position: fixed; z-index: 120; pointer-events: none; display: none;
+  border: 2px solid var(--accent); border-radius: 8px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, .55);
+}
+#tour-bubble {
+  position: fixed; z-index: 121; display: none; width: 380px; max-width: 92vw;
+  background: var(--panel); border: 1px solid var(--accent); border-radius: 10px;
+  padding: 12px 16px 14px; box-shadow: 0 12px 40px rgba(0, 0, 0, .5);
+}
+#tour-bubble h3 { margin: 8px 0 8px; font-size: 15px; }
+#tour-bubble p { margin: 0 0 12px; font-size: 13px; line-height: 1.7; }
+.tour-head { display: flex; justify-content: space-between; align-items: center; }
+.tour-progress { color: var(--muted); font-size: 12px; }
+.tour-close {
+  background: none; border: none; color: var(--muted); cursor: pointer; font-size: 12px;
+}
+.tour-close:hover { color: #ff7b72; }
+.tour-actions { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+.tour-wait { color: #e3c26e; font-size: 12px; margin-right: auto; }
+.tour-chapters { display: flex; flex-direction: column; gap: 8px; margin: 12px 0 4px; }
+.tour-chapter { text-align: left; display: flex; flex-direction: column; gap: 4px; padding: 10px 14px; }
+.tour-chapter span { font-size: 12px; color: rgba(255, 255, 255, .75); font-weight: 400; }
+.tour-chapter:disabled { opacity: .45; cursor: default; }
+
 .column-head.draggable-head { cursor: grab; }
 .column-head.draggable-head:active { cursor: grabbing; }
 .column.drop-target { outline: 2px dashed var(--accent); outline-offset: -2px; background: #2a2f3a; }

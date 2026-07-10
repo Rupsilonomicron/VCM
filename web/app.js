@@ -41,6 +41,9 @@ async function api(method, path, body) {
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) console.error(method, path, res.status);
+  if (res.ok) {
+    try { tourOnApi(path); } catch (e) { /* ツアー未初期化時は無視 */ }
+  }
   return res.ok ? res.json().catch(() => ({})) : null;
 }
 
@@ -505,6 +508,7 @@ dictReadingEl.addEventListener("keydown", (e) => {
 function render() {
   updateStatus();
   renderUpdate();
+  renderDemo();
   maybeOpenTokenModal();
   renderGuilds();
   renderControls();
@@ -712,6 +716,205 @@ document.addEventListener("mouseup", (e) => {
   ids.forEach((id) => selectedIds.add(id));
   render();
 });
+
+// --- チュートリアル（デモモード + ガイドツアー） ----------------------------
+// デモデータへ切り替えた上で、吹き出しガイドに沿って実際に操作して覚える。
+// waitState: スナップショットが条件を満たすと自動で次へ / waitApi: そのAPIが成功すると次へ
+const TOUR_CHAPTERS = {
+  basic: {
+    title: "基本フロー",
+    steps: [
+      {
+        title: "ようこそ！",
+        text: "これから大会運営の基本フローを練習します。いま表示されているのは<b>デモデータ</b>なので、" +
+          "何をしても実際のサーバーには影響しません。安心して触ってください。",
+        target: null,
+      },
+      {
+        title: "画面の見方",
+        text: "左が<b>ボイスチャンネル一覧</b>です。VCごとに接続中のメンバーが表示され、リアルタイムに更新されます。" +
+          "右はチーム編成のパネルです。",
+        target: "#channels-panel",
+      },
+      {
+        title: "メインVCを設定する",
+        text: "プルダウンから<b>「集合ロビー」</b>を選んでください。メインVCは「集合」の集合先で、" +
+          "読み上げbotの入室先にもなります。",
+        target: "#controlbar",
+        waitState: (s) => !!s.main_channel_id,
+      },
+      {
+        title: "チームを2つ作る",
+        text: "<b>「＋チーム追加」</b>を押してチームを2つ作ってください（名前は自由。空欄でもOK）。",
+        target: "#teams-panel",
+        waitState: (s) => (s.teams || []).length >= 2,
+      },
+      {
+        title: "メンバーをチームに入れる",
+        text: "メンバーカードをチームへ<b>ドラッグ＆ドロップ</b>してください。" +
+          "余白からドラッグすると<b>範囲選択</b>で複数人まとめて動かせます。合計4人以上入れてみましょう。",
+        target: "#channels-panel",
+        waitState: (s) => (s.teams || []).reduce((n, t) => n + t.members.length, 0) >= 4,
+      },
+      {
+        title: "シャッフル",
+        text: "<b>🔀 シャッフル</b>を押すと、チームのメンバーをランダムかつ均等に振り分け直せます。" +
+          "動かしたくない人は📌でピン留めできます（詳しくは応用編で）。",
+        target: "#shuffle-teams",
+        waitApi: "/api/teams/shuffle",
+      },
+      {
+        title: "チームをVCへ移動する",
+        text: "チームの<b>見出し</b>を「対戦VC 1」「対戦VC 2」へそれぞれドラッグしてください。" +
+          "チーム全員が一括移動し、そのVCが<b>散開先（⛺）</b>として記録されます。",
+        target: "#teams-panel",
+        waitState: (s) => (s.teams || []).length > 0 && (s.teams || []).every((t) => t.home_channel_id),
+      },
+      {
+        title: "集合",
+        text: "<b>⬇ 集合</b>を押すと、チームに所属している全員がメインVCへ集まります。" +
+          "（チーム未所属の人は動きません）",
+        target: "#gather-toggle",
+        waitApi: "/api/gather",
+      },
+      {
+        title: "散開",
+        text: "<b>⬆ 散開</b>を押すと、各チームが⛺の散開先VCへ一斉に移動します。" +
+          "「集合して作戦会議 → 散開して試合」がこの2つのボタンで回せます。",
+        target: "#gather-toggle",
+        waitApi: "/api/scatter",
+      },
+      {
+        title: "基本フロー完了！ 🎉",
+        text: "これで大会運営の基本操作はマスターです。実際のサーバーで使うには、" +
+          "⚙ 設定から Bot トークンを設定してください。応用編・読み上げ編は近日追加予定です。",
+        target: null,
+        last: true,
+      },
+    ],
+  },
+};
+
+const tourHighlightEl = document.createElement("div");
+tourHighlightEl.id = "tour-highlight";
+const tourBubbleEl = document.createElement("div");
+tourBubbleEl.id = "tour-bubble";
+document.body.appendChild(tourHighlightEl);
+document.body.appendChild(tourBubbleEl);
+
+let tour = null;       // {chapterId, index} 実行中のみ
+let tourTimer = null;  // 対象要素の再描画に追従するための位置更新タイマー
+
+function tourStep() {
+  return tour ? TOUR_CHAPTERS[tour.chapterId].steps[tour.index] : null;
+}
+
+async function startTour(chapterId) {
+  document.getElementById("tour-menu").classList.add("hidden");
+  document.getElementById("tour-suggest").classList.add("hidden");
+  localStorage.setItem("vcm-tutorial-prompted", "1");
+  await api("POST", "/api/demo/start");  // 既にデモ中でも状態がリセットされる
+  tour = { chapterId, index: 0 };
+  if (!tourTimer) tourTimer = setInterval(positionTour, 250);
+  showTourStep();
+}
+
+async function endTour() {
+  if (tourTimer) { clearInterval(tourTimer); tourTimer = null; }
+  tour = null;
+  tourHighlightEl.style.display = "none";
+  tourBubbleEl.style.display = "none";
+  await api("POST", "/api/demo/stop");
+}
+
+function advanceTour() {
+  if (!tour) return;
+  if (tour.index >= TOUR_CHAPTERS[tour.chapterId].steps.length - 1) { endTour(); return; }
+  tour.index += 1;
+  showTourStep();
+}
+
+function showTourStep() {
+  const step = tourStep();
+  if (!step) return;
+  const total = TOUR_CHAPTERS[tour.chapterId].steps.length;
+  const waiting = !!(step.waitState || step.waitApi);
+  tourBubbleEl.innerHTML =
+    `<div class="tour-head"><span class="tour-progress">${tour.index + 1} / ${total}</span>` +
+    `<button class="tour-close" title="チュートリアルを終了">✕ 終了</button></div>` +
+    `<h3>${step.title}</h3><p>${step.text}</p>` +
+    `<div class="tour-actions">` +
+    (waiting
+      ? `<span class="tour-wait">👉 実際に操作すると次へ進みます</span>` +
+        `<button class="btn ghost sm tour-skip">スキップ</button>`
+      : `<button class="btn tour-next">${step.last ? "チュートリアルを終える" : "次へ"}</button>`) +
+    `</div>`;
+  tourBubbleEl.querySelector(".tour-close").onclick = endTour;
+  const next = tourBubbleEl.querySelector(".tour-next");
+  if (next) next.onclick = step.last ? endTour : advanceTour;
+  const skip = tourBubbleEl.querySelector(".tour-skip");
+  if (skip) skip.onclick = advanceTour;
+  tourBubbleEl.style.display = "block";
+  positionTour();
+}
+
+function positionTour() {
+  const step = tourStep();
+  if (!step) return;
+  const target = step.target ? document.querySelector(step.target) : null;
+  if (target) {
+    const r = target.getBoundingClientRect();
+    tourHighlightEl.style.display = "block";
+    tourHighlightEl.style.left = `${r.left - 6}px`;
+    tourHighlightEl.style.top = `${r.top - 6}px`;
+    tourHighlightEl.style.width = `${r.width + 12}px`;
+    tourHighlightEl.style.height = `${r.height + 12}px`;
+    const bh = tourBubbleEl.offsetHeight || 180;
+    const below = r.bottom + 14 + bh < innerHeight;
+    tourBubbleEl.style.top = `${below ? r.bottom + 14 : Math.max(10, r.top - bh - 14)}px`;
+    tourBubbleEl.style.left = `${Math.min(Math.max(10, r.left), innerWidth - 390)}px`;
+    tourBubbleEl.style.transform = "";
+  } else {
+    tourHighlightEl.style.display = "none";
+    tourBubbleEl.style.top = "45%";
+    tourBubbleEl.style.left = "50%";
+    tourBubbleEl.style.transform = "translate(-50%, -50%)";
+  }
+}
+
+function tourOnState() {
+  const step = tourStep();
+  if (step && step.waitState && step.waitState(lastSnapshot)) advanceTour();
+}
+
+function tourOnApi(path) {
+  const step = tourStep();
+  if (step && step.waitApi && path === step.waitApi) advanceTour();
+}
+
+function renderDemo() {
+  document.getElementById("demo-badge").classList.toggle("hidden", !lastSnapshot.demo);
+  tourOnState();
+  // 初回接続後にチュートリアルを一度だけ提案
+  if (!lastSnapshot.demo && !tour && lastSnapshot.bot_state === "ready" &&
+      !localStorage.getItem("vcm-tutorial-prompted")) {
+    document.getElementById("tour-suggest").classList.remove("hidden");
+  }
+}
+
+document.getElementById("tutorial-btn").onclick = () =>
+  document.getElementById("tour-menu").classList.remove("hidden");
+document.getElementById("tour-menu-close").onclick = () =>
+  document.getElementById("tour-menu").classList.add("hidden");
+document.querySelectorAll(".tour-chapter[data-chapter]").forEach((b) => {
+  b.onclick = () => startTour(b.dataset.chapter);
+});
+document.getElementById("demo-exit").onclick = endTour;
+document.getElementById("tour-suggest-start").onclick = () => startTour("basic");
+document.getElementById("tour-suggest-later").onclick = () => {
+  localStorage.setItem("vcm-tutorial-prompted", "1");
+  document.getElementById("tour-suggest").classList.add("hidden");
+};
 
 // --- 操作 --------------------------------------------------------------
 document.getElementById("add-team").onclick = async () => {

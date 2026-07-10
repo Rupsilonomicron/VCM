@@ -25,6 +25,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from vcm import config as vcm_config
+from vcm import demo as vcm_demo
 from vcm import tts as tts_store
 from vcm import update as vcm_update
 
@@ -89,6 +90,10 @@ class ConnectionManager:
         self.update_info: Optional[dict] = None  # 新バージョン情報（無ければ None）
         self.update_status = "idle"  # idle / downloading / restarting / error:...
         self.runtime_port: Optional[int] = None  # 起動時に待ち受けているポート（再起動要否判定用）
+        # チュートリアル（デモモード）。実クライアントを退避して偽クライアントへ差し替える
+        self.demo_active = False
+        self._real_client = None
+        self._real_selected: Optional[str] = None
         self._lock = asyncio.Lock()
         # GUI（ブラウザ）が全て閉じたらアプリを終了するための仕組み
         self._shutdown_cb = None
@@ -255,6 +260,29 @@ class ConnectionManager:
             raise HTTPException(status_code=404, detail="team not found")
         return team
 
+    # --- チュートリアル（デモモード） ------------------------------------------
+    def enter_demo(self):
+        """実クライアントを退避し、偽クライアント（デモデータ）へ切り替える。
+        すでにデモ中なら、デモ状態だけを初期化する（チャプターのやり直し用）。"""
+        if not self.demo_active:
+            self._real_client = self.client
+            self._real_selected = self.selected_guild_id
+            self.demo_active = True
+        self.client = vcm_demo.DemoClient()
+        self.selected_guild_id = vcm_demo.DEMO_GUILD_ID
+        self.states[vcm_demo.DEMO_GUILD_ID] = GuildState()  # 毎回まっさらな状態から
+
+    def exit_demo(self):
+        """デモを終了して実クライアント・実サーバー選択へ戻す。"""
+        if not self.demo_active:
+            return
+        self.client = self._real_client
+        self.selected_guild_id = self._real_selected
+        self._real_client = None
+        self._real_selected = None
+        self.states.pop(vcm_demo.DEMO_GUILD_ID, None)
+        self.demo_active = False
+
     # --- 参加希望（Discord 側からのチーム選択） --------------------------------
     def teams_for_recruit(self, guild_id: str) -> list:
         """募集ボタンが押された時点のチーム一覧（GUIの選択サーバーに依存しない）。"""
@@ -350,10 +378,14 @@ class ConnectionManager:
         if ready and gid:
             tts.update(self.client.tts_state(gid))
 
+        # デモ中は bot の実状態を隠して ready 扱いにする（トークン未設定でも
+        # 強制モーダルを出さず、チュートリアルを進められるように）
+        bot_state = "ready" if self.demo_active else (
+            self.runner.state if self.runner else ("ready" if ready else "connecting"))
         return {
             "ready": ready,
-            "bot_state": self.runner.state if self.runner else ("ready" if ready else "connecting"),
-            "bot_error": self.runner.error if self.runner else None,
+            "bot_state": bot_state,
+            "bot_error": None if self.demo_active else (self.runner.error if self.runner else None),
             "bot_user": str(self.client.user) if (ready and self.client.user) else None,
             "tts": tts,
             "guilds": self.client.list_guilds() if self.client else [],
@@ -368,6 +400,7 @@ class ConnectionManager:
             "pinned_ids": sorted(st.pinned_ids) if st else [],
             "update": self.update_info,
             "update_status": self.update_status,
+            "demo": self.demo_active,
         }
 
     async def broadcast(self):
@@ -492,6 +525,11 @@ def create_app(manager: ConnectionManager, runner) -> FastAPI:
             raise HTTPException(status_code=409, detail="bot が Discord に接続していません")
         return manager.client
 
+    def no_demo():
+        """デモ（チュートリアル）中は使えない操作のガード。"""
+        if manager.demo_active:
+            raise HTTPException(status_code=400, detail="チュートリアル中はこの操作は使えません")
+
     @app.middleware("http")
     async def no_cache(request, call_next):
         # ローカルツールなので静的ファイルを常に最新で配信（キャッシュ起因の不整合防止）
@@ -529,6 +567,19 @@ def create_app(manager: ConnectionManager, runner) -> FastAPI:
     @app.post("/api/guild")
     async def select_guild(body: SelectGuild):
         manager.select_guild(body.guild_id)
+        await manager.broadcast()
+        return {"ok": True}
+
+    # --- チュートリアル（デモモード） ---
+    @app.post("/api/demo/start")
+    async def demo_start():
+        manager.enter_demo()
+        await manager.broadcast()
+        return {"ok": True}
+
+    @app.post("/api/demo/stop")
+    async def demo_stop():
+        manager.exit_demo()
         await manager.broadcast()
         return {"ok": True}
 
@@ -623,6 +674,7 @@ def create_app(manager: ConnectionManager, runner) -> FastAPI:
     # --- 参加希望（募集） ---
     @app.post("/api/recruit/start")
     async def recruit_start():
+        no_demo()  # デモではDiscordへメッセージを送れない
         st = manager.state()
         gid = manager.selected_guild_id
         if not st.main_channel_id:
@@ -664,6 +716,7 @@ def create_app(manager: ConnectionManager, runner) -> FastAPI:
     # --- 自動アップデート ---
     @app.post("/api/update/apply")
     async def update_apply():
+        no_demo()  # チュートリアル中に再起動しない
         info = manager.update_info
         if not info:
             raise HTTPException(status_code=409, detail="適用できる更新がありません")
@@ -723,6 +776,7 @@ def create_app(manager: ConnectionManager, runner) -> FastAPI:
 
     @app.post("/api/token")
     async def set_token(body: SetToken):
+        no_demo()  # デモ中に実クライアントを起動すると状態が壊れる
         token = body.token.strip()
         if not token:
             raise HTTPException(status_code=400, detail="トークンが空です")
@@ -733,6 +787,7 @@ def create_app(manager: ConnectionManager, runner) -> FastAPI:
 
     @app.delete("/api/token")
     async def delete_token():
+        no_demo()
         vcm_config.delete_token()
         await runner.clear()
         return {"ok": True}
@@ -777,6 +832,7 @@ def create_app(manager: ConnectionManager, runner) -> FastAPI:
     # --- 読み上げ辞書 ---
     @app.post("/api/tts/dict")
     async def dict_add(body: DictEntry):
+        no_demo()  # デモのギルドIDで tts.json を汚さない
         word = body.word.strip()
         reading = body.reading.strip()
         if not word or not reading:
@@ -790,6 +846,7 @@ def create_app(manager: ConnectionManager, runner) -> FastAPI:
 
     @app.post("/api/tts/dict/delete")
     async def dict_delete(body: DictWord):
+        no_demo()
         manager._ensure_selected()
         if manager.selected_guild_id is None:
             raise HTTPException(status_code=409, detail="操作対象サーバーがありません")
@@ -800,18 +857,21 @@ def create_app(manager: ConnectionManager, runner) -> FastAPI:
     # --- プリセット ---
     @app.post("/api/presets")
     async def save_preset(body: SavePreset):
+        no_demo()  # デモのギルドIDで presets.json を汚さない
         manager.save_preset(body.name)
         await manager.broadcast()
         return {"ok": True}
 
     @app.post("/api/presets/{name}/load")
     async def load_preset(name: str):
+        no_demo()
         manager.load_preset(name)
         await manager.broadcast()
         return {"ok": True}
 
     @app.delete("/api/presets/{name}")
     async def delete_preset(name: str):
+        no_demo()
         manager.delete_preset(name)
         await manager.broadcast()
         return {"ok": True}

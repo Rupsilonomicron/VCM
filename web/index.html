@@ -11,9 +11,13 @@
     <h1>VCM</h1>
     <span class="cb-label">サーバー</span>
     <select id="guild-select" class="guild-select"></select>
+    <span id="demo-badge" class="demo-badge hidden">🎓 チュートリアル中（デモデータ）
+      <button id="demo-exit" class="btn sm">終了</button>
+    </span>
     <span id="status" class="status off">未接続</span>
     <a id="update-link" class="update-link hidden" target="_blank" rel="noopener"
        title="クリックでリリースページを開きます"></a>
+    <button id="tutorial-btn" class="btn ghost sm" title="デモデータで操作を練習できます">🎓 チュートリアル</button>
     <button id="settings-btn" class="btn ghost sm" title="トークン・ポート・VOICEVOX の設定">⚙ 設定</button>
   </header>
 
@@ -97,6 +101,50 @@
         <span class="spacer"></span>
         <button id="update-cancel" class="btn ghost">あとで</button>
         <button id="update-apply" class="btn">アップデートして再起動</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="tour-menu" class="modal hidden">
+    <div class="modal-box">
+      <h2>🎓 チュートリアル</h2>
+      <p class="modal-desc">
+        デモデータを使って操作を練習できます。実際のサーバーには一切影響しません。<br />
+        Bot トークンの設定前でも試せます。
+      </p>
+      <div class="tour-chapters">
+        <button class="tour-chapter btn block" data-chapter="basic">
+          <b>基本フロー</b>
+          <span>メインVC設定 → チーム作成 → メンバー割当 → シャッフル → 集合・散開</span>
+        </button>
+        <button class="tour-chapter btn block" disabled>
+          <b>応用編（近日追加）</b>
+          <span>ピン留め・範囲選択・プリセット・参加希望の受付</span>
+        </button>
+        <button class="tour-chapter btn block" disabled>
+          <b>読み上げ編（近日追加）</b>
+          <span>VOICEVOX・/voice・読み上げ辞書</span>
+        </button>
+      </div>
+      <div class="modal-actions">
+        <span class="spacer"></span>
+        <button id="tour-menu-close" class="btn ghost">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="tour-suggest" class="modal hidden">
+    <div class="modal-box">
+      <h2>🎓 はじめての方へ</h2>
+      <p class="modal-desc">
+        チュートリアルで基本操作を練習できます。デモデータを使うので、
+        実際のサーバーには影響しません。<br />
+        あとからでも、ヘッダーの「🎓 チュートリアル」からいつでも始められます。
+      </p>
+      <div class="modal-actions">
+        <span class="spacer"></span>
+        <button id="tour-suggest-later" class="btn ghost">あとで</button>
+        <button id="tour-suggest-start" class="btn">チュートリアルを始める</button>
       </div>
     </div>
   </div>
