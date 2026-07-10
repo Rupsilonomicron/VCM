@@ -751,9 +751,9 @@ const TOUR_CHAPTERS = {
       },
       {
         title: "メンバーをチームに入れる",
-        text: "メンバーカードをチームへ<b>ドラッグ＆ドロップ</b>してください。" +
+        text: "左のメンバーカードを右のチームへ<b>ドラッグ＆ドロップ</b>してください。" +
           "余白からドラッグすると<b>範囲選択</b>で複数人まとめて動かせます。合計4人以上入れてみましょう。",
-        target: "#channels-panel",
+        target: ["#channels-panel", "#teams-panel"],  // 移動元と移動先の両方を照らす
         waitState: (s) => (s.teams || []).reduce((n, t) => n + t.members.length, 0) >= 4,
       },
       {
@@ -767,7 +767,12 @@ const TOUR_CHAPTERS = {
         title: "チームをVCへ移動する",
         text: "チームの<b>見出し</b>を「対戦VC 1」「対戦VC 2」へそれぞれドラッグしてください。" +
           "チーム全員が一括移動し、そのVCが<b>散開先（⛺）</b>として記録されます。",
-        target: "#teams-panel",
+        // 移動元（チーム）と移動先（対戦VCの列）の両方を照らす
+        target: () => [
+          document.getElementById("teams-panel"),
+          document.querySelector('.list[data-id="demo-vc1"]')?.closest(".column"),
+          document.querySelector('.list[data-id="demo-vc2"]')?.closest(".column"),
+        ].filter(Boolean),
         waitState: (s) => (s.teams || []).length > 0 && (s.teams || []).every((t) => t.home_channel_id),
       },
       {
@@ -858,12 +863,29 @@ function showTourStep() {
   positionTour();
 }
 
+function tourTargets(step) {
+  // target は セレクタ / セレクタ配列 / 要素配列を返す関数 のいずれか
+  if (!step.target) return [];
+  if (typeof step.target === "function") return step.target().filter(Boolean);
+  const sels = Array.isArray(step.target) ? step.target : [step.target];
+  return sels.map((s) => document.querySelector(s)).filter(Boolean);
+}
+
 function positionTour() {
   const step = tourStep();
   if (!step) return;
-  const target = step.target ? document.querySelector(step.target) : null;
-  if (target) {
-    const r = target.getBoundingClientRect();
+  const targets = tourTargets(step);
+  if (targets.length) {
+    // 複数ターゲットは全体を囲む結合矩形にスポットライトを当てる
+    const rects = targets.map((el) => el.getBoundingClientRect());
+    const r = {
+      left: Math.min(...rects.map((x) => x.left)),
+      top: Math.min(...rects.map((x) => x.top)),
+      right: Math.max(...rects.map((x) => x.right)),
+      bottom: Math.max(...rects.map((x) => x.bottom)),
+    };
+    r.width = r.right - r.left;
+    r.height = r.bottom - r.top;
     tourHighlightEl.style.display = "block";
     tourHighlightEl.style.left = `${r.left - 6}px`;
     tourHighlightEl.style.top = `${r.top - 6}px`;
