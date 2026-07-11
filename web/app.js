@@ -358,6 +358,7 @@ function toggleSelect(id, div) {
     selectedIds.add(id);
     div.classList.add("selected");
   }
+  tourOnSelect();  // クリック選択でも規定数に達したらツアーを進める
 }
 
 function makeColumn(title, count, kind, id) {
@@ -715,6 +716,7 @@ document.addEventListener("mouseup", (e) => {
   selectedIds.clear();
   ids.forEach((id) => selectedIds.add(id));
   render();
+  tourOnSelect();  // 範囲選択で規定数に達したらツアーを進める
 });
 
 // --- チュートリアル（デモモード + ガイドツアー） ----------------------------
@@ -752,7 +754,7 @@ const TOUR_CHAPTERS = {
       {
         title: "メンバーをチームに入れる",
         text: "左のメンバーカードを右のチームへ<b>ドラッグ＆ドロップ</b>してください。" +
-          "余白からドラッグすると<b>範囲選択</b>で複数人まとめて動かせます。合計4人以上入れてみましょう。",
+          "カードを<b>クリック</b>すると複数選択でき、まとめて動かせます。合計4人以上入れてみましょう。",
         target: ["#channels-panel", "#teams-panel"],  // 移動元と移動先の両方を照らす
         waitState: (s) => (s.teams || []).reduce((n, t) => n + t.members.length, 0) >= 4,
       },
@@ -792,7 +794,63 @@ const TOUR_CHAPTERS = {
       {
         title: "基本フロー完了！ 🎉",
         text: "これで大会運営の基本操作はマスターです。実際のサーバーで使うには、" +
-          "⚙ 設定から Bot トークンを設定してください。応用編・読み上げ編は近日追加予定です。",
+          "⚙ 設定から Bot トークンを設定してください。<b>応用編</b>もぜひ試してみてください。",
+        target: null,
+        last: true,
+      },
+    ],
+  },
+  advanced: {
+    title: "応用編",
+    scenario: "advanced",
+    steps: [
+      {
+        title: "応用編へようこそ",
+        text: "ここでは<b>ピン留め・範囲選択・プリセット・参加希望の受付</b>を紹介します。" +
+          "練習しやすいよう、あらかじめチームを編成した状態のデモを用意しました。",
+        target: null,
+      },
+      {
+        title: "範囲選択",
+        text: "パネルの<b>余白からドラッグ</b>すると、枠に触れたメンバーをまとめて選択できます。" +
+          "そのままドラッグして一括移動も可能です。ロビーで<b>2人以上</b>を囲んでみましょう。" +
+          "（Ctrl を押しながらで追加選択、余白クリックで解除）",
+        target: "#channels-panel",
+        waitSelect: 2,
+      },
+      {
+        title: "ピン留め",
+        text: "チーム内のメンバーにマウスを乗せると<b>📌</b>が出ます。押すとピン留めされ、" +
+          "シャッフルしても<b>そのチームから動きません</b>。リーダー固定などに便利です。" +
+          "誰か1人ピン留めしてみましょう。",
+        target: "#teams-panel",
+        waitApi: "/api/pins/toggle",
+      },
+      {
+        title: "シャッフル（ピン留めの効果）",
+        text: "<b>🔀 シャッフル</b>を押すと、ピン留めした人はそのままで、" +
+          "残りのメンバーだけがランダムかつ均等に振り分け直されます。",
+        target: "#shuffle-teams",
+        waitApi: "/api/teams/shuffle",
+      },
+      {
+        title: "プリセットで編成を保存",
+        text: "<b>「現在の編成を保存」</b>で、いまのチーム編成に名前を付けて保存できます。" +
+          "保存した編成はワンクリックで呼び出せるので、毎回組み直す手間が省けます。" +
+          "<br>（※チュートリアルでは実際の保存はしません）",
+        target: "#save-preset",
+      },
+      {
+        title: "参加希望の受付",
+        text: "<b>✋ 参加希望を募る</b>を押すと、メインVCのチャットに「参加希望」ボタンを設置します。" +
+          "参加者はボタンから自分でチームを選べるので、大人数の受付が一気に楽になります。" +
+          "<br>（※この機能は実際のサーバーで使えます）",
+        target: "#recruit-toggle",
+      },
+      {
+        title: "応用編 完了！ 🎉",
+        text: "おつかれさまでした。これで VCM のほぼすべての機能を体験しました。" +
+          "実際のサーバーで使うには、⚙ 設定から Bot トークンを設定してください。",
         target: null,
         last: true,
       },
@@ -818,7 +876,8 @@ async function startTour(chapterId) {
   document.getElementById("tour-menu").classList.add("hidden");
   document.getElementById("tour-suggest").classList.add("hidden");
   localStorage.setItem("vcm-tutorial-prompted", "1");
-  await api("POST", "/api/demo/start");  // 既にデモ中でも状態がリセットされる
+  const scenario = TOUR_CHAPTERS[chapterId].scenario || "basic";
+  await api("POST", "/api/demo/start", { scenario });  // 既にデモ中でも状態がリセットされる
   tour = { chapterId, index: 0 };
   if (!tourTimer) tourTimer = setInterval(positionTour, 250);
   showTourStep();
@@ -843,7 +902,7 @@ function showTourStep() {
   const step = tourStep();
   if (!step) return;
   const total = TOUR_CHAPTERS[tour.chapterId].steps.length;
-  const waiting = !!(step.waitState || step.waitApi);
+  const waiting = !!(step.waitState || step.waitApi || step.waitSelect);
   tourBubbleEl.innerHTML =
     `<div class="tour-head"><span class="tour-progress">${tour.index + 1} / ${total}</span>` +
     `<button class="tour-close" title="チュートリアルを終了">✕ 終了</button></div>` +
@@ -912,6 +971,11 @@ function tourOnState() {
 function tourOnApi(path) {
   const step = tourStep();
   if (step && step.waitApi && path === step.waitApi) advanceTour();
+}
+
+function tourOnSelect() {
+  const step = tourStep();
+  if (step && step.waitSelect && selectedIds.size >= step.waitSelect) advanceTour();
 }
 
 function renderDemo() {

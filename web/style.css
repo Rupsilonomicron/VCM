@@ -231,8 +231,9 @@ main {
 .tour-actions { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
 .tour-wait { color: #e3c26e; font-size: 12px; margin-right: auto; }
 .tour-chapters { display: flex; flex-direction: column; gap: 8px; margin: 12px 0 4px; }
-.tour-chapter { text-align: left; display: flex; flex-direction: column; gap: 4px; padding: 10px 14px; }
-.tour-chapter span { font-size: 12px; color: rgba(255, 255, 255, .75); font-weight: 400; }
+.tour-chapter { text-align: left; padding: 10px 14px; }
+.tour-chapter b { display: block; margin-bottom: 4px; }
+.tour-chapter span { display: block; font-size: 12px; color: rgba(255, 255, 255, .75); font-weight: 400; line-height: 1.5; }
 .tour-chapter:disabled { opacity: .45; cursor: default; }
 
 .column-head.draggable-head { cursor: grab; }

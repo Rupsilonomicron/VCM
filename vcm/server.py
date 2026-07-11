@@ -261,9 +261,10 @@ class ConnectionManager:
         return team
 
     # --- チュートリアル（デモモード） ------------------------------------------
-    def enter_demo(self):
+    def enter_demo(self, scenario: str = "basic"):
         """実クライアントを退避し、偽クライアント（デモデータ）へ切り替える。
-        すでにデモ中なら、デモ状態だけを初期化する（チャプターのやり直し用）。"""
+        すでにデモ中なら、デモ状態だけを初期化する（チャプターのやり直し用）。
+        scenario="advanced" のときはチーム編成済みの状態で始める（応用編用）。"""
         if not self.demo_active:
             self._real_client = self.client
             self._real_selected = self.selected_guild_id
@@ -271,6 +272,12 @@ class ConnectionManager:
         self.client = vcm_demo.DemoClient()
         self.selected_guild_id = vcm_demo.DEMO_GUILD_ID
         self.states[vcm_demo.DEMO_GUILD_ID] = GuildState()  # 毎回まっさらな状態から
+        if scenario == "advanced":
+            # 応用編はピン留め・シャッフルをすぐ試せるよう、チームを編成済みにする
+            # （VC は動かさないので全員ロビー表示のまま、チームは論理グループとして構成）
+            ids = [str(i + 1) for i in range(len(vcm_demo._MEMBER_NAMES))]
+            self.create_team("チームA")["member_ids"] = ids[0:3]
+            self.create_team("チームB")["member_ids"] = ids[3:6]
 
     def exit_demo(self):
         """デモを終了して実クライアント・実サーバー選択へ戻す。"""
@@ -451,6 +458,10 @@ class SelectGuild(BaseModel):
     guild_id: str
 
 
+class DemoStart(BaseModel):
+    scenario: str = "basic"
+
+
 class CreateTeam(BaseModel):
     name: Optional[str] = None
 
@@ -572,8 +583,8 @@ def create_app(manager: ConnectionManager, runner) -> FastAPI:
 
     # --- チュートリアル（デモモード） ---
     @app.post("/api/demo/start")
-    async def demo_start():
-        manager.enter_demo()
+    async def demo_start(body: Optional[DemoStart] = None):
+        manager.enter_demo(body.scenario if body else "basic")
         await manager.broadcast()
         return {"ok": True}
 
