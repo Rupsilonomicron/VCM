@@ -97,10 +97,12 @@ VCM/
     tts.py           読み上げキュー・テキスト前処理・辞書/声設定の永続化（tts.json）
     update.py        GitHub Releases による更新確認
     server.py        FastAPI（WebSocket + REST、チーム状態を保持）
+    demo.py          チュートリアル用のデモモード（偽クライアントに差し替えて練習）
   web/
     index.html / app.js / style.css   ブラウザGUI
   dist_files/        配布物専用ファイルの原本（配布先向け README・同梱Python用 start_bot.bat）
   promo/             紹介用サムネイル・スクリーンショットの素材
+  .build/            ビルドの作業フォルダ（自動生成・同梱Python等のキャッシュ）
   build_dist.bat     配布物ビルド（下記）
   build_dist.ps1     ビルドの実処理
   start_bot.bat      開発用起動（.venv の Python を使用）
@@ -113,12 +115,13 @@ VCM/
 ## 配布物のビルドとリリース
 
 ソース（vcm/ や web/）を修正したら `build_dist.bat` をダブルクリック。
-`..\配布用\VCM` と `..\配布用\VCM_v{version}.zip` を最新のソースで作り直します。
+`..\配布用\VCM_v{version}.zip` を最新のソースで作り直します
+（組み立ては `.build\VCM` で行われ、`配布用` には zip だけが置かれます）。
 
 - バージョンは `vcm/__init__.py` の `__version__` が唯一の定義元
   （README 見出し×2 と CHANGELOG も合わせて更新する）
 - 埋め込み Python（3.12.10）は無ければ自動ダウンロード。依存は requirements.txt が
-  変わったときだけ再インストール（`python\Lib\site-packages` へ同梱）
+  変わったときだけ再インストール（`.build\VCM\python\Lib\site-packages` へ同梱）
 - `config.json` / `presets.json` / `tts.json` / `__pycache__` は配布物から自動除去
 - 配布先向けの README と start_bot.bat は `dist_files/` の内容が使われる
   （配布物の文面を直したいときは `dist_files/` 側を編集）
