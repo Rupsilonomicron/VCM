@@ -11,7 +11,10 @@ $ErrorActionPreference = "Stop"
 $src = $PSScriptRoot
 $distFolderName = [string][char]0x914D + [char]0x5E03 + [char]0x7528  # "HaiFuYou"
 $distRoot = Join-Path (Split-Path $src -Parent) $distFolderName
-$dist = Join-Path $distRoot "VCM"
+# Staging folder for the assembled tree. Kept OUTSIDE $distRoot so the
+# distribution folder ends up holding only the zip. Persisted between runs
+# so the bundled Python download and dependency install stay cached.
+$dist = Join-Path $src ".build\VCM"
 
 # App version comes from vcm\__init__.py (single source of truth)
 $initPy = Join-Path $src "vcm\__init__.py"
@@ -83,6 +86,7 @@ Get-ChildItem $dist -Recurse -Directory -Filter "__pycache__" | Remove-Item -Rec
 
 # --- 5. Zip -------------------------------------------------------------------
 Write-Host "[build] creating zip ..."
+New-Item -ItemType Directory -Force $distRoot | Out-Null
 # Drop zips from previous versions so only the current one remains
 Get-ChildItem $distRoot -Filter "VCM*.zip" -File | Remove-Item -Force
 Compress-Archive -Path $dist -DestinationPath $zipPath -Force
