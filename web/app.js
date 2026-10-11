@@ -34,18 +34,43 @@ const tokenCancelBtn = document.getElementById("token-cancel");
 const tokenDeleteBtn = document.getElementById("token-delete");
 
 // --- API ---------------------------------------------------------------
+// 失敗時はサーバーの detail（無ければ HTTP ステータス）を画面下のトーストで知らせる
 async function api(method, path, body) {
-  const res = await fetch(path, {
-    method,
-    headers: { "Content-Type": "application/json" },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if (!res.ok) console.error(method, path, res.status);
-  if (res.ok) {
-    try { tourOnApi(path); } catch (e) { /* ツアー未初期化時は無視 */ }
+  let res;
+  try {
+    res = await fetch(path, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch (e) {
+    showToast("VCM 本体に接続できませんでした（アプリが終了していないか確認してください）");
+    return null;
   }
-  return res.ok ? res.json().catch(() => ({})) : null;
+  if (!res.ok) {
+    console.error(method, path, res.status);
+    const data = await res.json().catch(() => null);
+    const detail = data && typeof data.detail === "string" ? data.detail : null;
+    showToast(detail || `操作に失敗しました（HTTP ${res.status}）`);
+    return null;
+  }
+  try { tourOnApi(path); } catch (e) { /* ツアー未初期化時は無視 */ }
+  return res.json().catch(() => ({}));
 }
+
+// --- エラー通知（トースト） ---------------------------------------------
+const toastEl = document.createElement("div");
+toastEl.id = "toast";
+document.body.appendChild(toastEl);
+let toastTimer = null;
+
+function showToast(text) {
+  toastEl.textContent = text;
+  toastEl.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove("show"), 6000);
+}
+toastEl.addEventListener("click", () => toastEl.classList.remove("show"));
 
 // --- WebSocket ---------------------------------------------------------
 let updateRestarting = false;  // アップデートによる再起動を待っている状態
@@ -400,9 +425,11 @@ function renderControls() {
   gatherToggleBtn.classList.toggle("scatter-mode", gathered);
   // メインVC未設定時は集合できない
   gatherToggleBtn.disabled = !gathered && !lastSnapshot.main_channel_id;
+  const hasHome = (lastSnapshot.teams || []).some((t) => t.home_channel_id);
   gatherToggleBtn.title = gathered
     ? "各チームを散開先VC（⛺表示のVC）へ移動します"
-    : "チーム所属メンバー全員をメインVCへ移動します";
+    : "チーム所属メンバー全員をメインVCへ移動します" +
+      (hasHome ? "" : "（散開するには、先にチーム見出しをVCへドラッグして散開先を記録してください）");
 
   // 参加希望トグル: 募集中なら「締め切る」。メインVCとチームが揃うまで押せない
   const recruiting = !!lastSnapshot.recruiting;
@@ -419,9 +446,9 @@ function renderControls() {
     const chip = document.createElement("span");
     chip.className = "preset-chip";
     chip.innerHTML = `<button class="load">${escapeHtml(name)}</button><button class="del" title="削除">✕</button>`;
-    chip.querySelector(".load").onclick = () => api("POST", `/api/presets/${encodeURIComponent(name)}/load`);
+    chip.querySelector(".load").onclick = () => api("POST", "/api/presets/load", { name });
     chip.querySelector(".del").onclick = () => {
-      if (confirm(`プリセット「${name}」を削除しますか？`)) api("DELETE", `/api/presets/${encodeURIComponent(name)}`);
+      if (confirm(`プリセット「${name}」を削除しますか？`)) api("POST", "/api/presets/delete", { name });
     };
     presetsEl.appendChild(chip);
   });

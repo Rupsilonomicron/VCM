@@ -203,6 +203,17 @@ main {
   border-radius: 2px;
 }
 
+/* --- エラー通知（トースト） --- */
+#toast {
+  position: fixed; z-index: 130; left: 50%; bottom: 24px;
+  transform: translate(-50%, 20px); opacity: 0; pointer-events: none;
+  max-width: min(560px, 92vw); padding: 10px 16px; border-radius: 8px;
+  background: #4a2d2d; color: #ffb1aa; border: 1px solid #7a3b3b;
+  font-size: 13px; line-height: 1.6; box-shadow: 0 8px 24px rgba(0, 0, 0, .4);
+  transition: opacity .2s, transform .2s; cursor: pointer;
+}
+#toast.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+
 /* --- チュートリアル --- */
 .demo-badge {
   font-size: 13px; padding: 3px 6px 3px 12px; border-radius: 10px;

@@ -58,6 +58,16 @@ class VCMClient(discord.Client):
         await self._on_change()
 
     async def on_voice_state_update(self, member, before, after):
+        if self.user and member.id == self.user.id:
+            reader = self.readers.get(member.guild.id)
+            if reader and after.channel is None:
+                # 切断された（キック等）: 読み上げを止め、GUI 上も未入室に戻す
+                # （メインVCを選び直すと入室し直す）
+                self.readers.pop(member.guild.id, None)
+                await reader.close()
+            elif reader and after.channel.id != reader.channel_id:
+                # 他人に別VCへ移動された: 読み上げ対象を移動先VCのチャットに合わせる
+                reader.channel_id = after.channel.id
         await self._on_change()
 
     async def on_guild_join(self, guild):
@@ -195,6 +205,8 @@ class VCMClient(discord.Client):
         if guild.voice_client and guild.voice_client.is_connected():
             await guild.voice_client.move_to(channel)
         else:
+            if guild.voice_client:  # 切断済みの残骸があると connect() が失敗するため片付ける
+                await guild.voice_client.disconnect(force=True)
             await channel.connect()
         reader = self.readers.get(guild.id)
         if reader is None:

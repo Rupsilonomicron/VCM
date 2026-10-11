@@ -29,10 +29,15 @@ class BotRunner:
         self._connect_task: Optional[asyncio.Task] = None
         self.state = "no_token"
         self.error: Optional[str] = None
+        # 起動・停止を直列化する（起動時ログイン中に GUI からトークンを設定し直すと
+        # クライアントが2つ並行して動いてしまうのを防ぐ）
+        self._lock = asyncio.Lock()
 
     async def _on_change(self):
         if self.state == "connecting" and self.client and self.client.is_ready():
             self.state = "ready"
+            # 再起動前に設定されていたメインVCへ読み上げbotを入室し直す
+            await self.manager.restore_voice(self.client)
         await self.manager.broadcast()
 
     async def start(self, token: str) -> bool:
@@ -40,7 +45,11 @@ class BotRunner:
 
         検証はログイン試行そのもので行う（無効なら invalid_token になる）。
         """
-        await self.stop()
+        async with self._lock:
+            return await self._start(token)
+
+    async def _start(self, token: str) -> bool:
+        await self._stop()
         self.state = "connecting"
         self.error = None
         client = VCMClient(on_change=self._on_change, engine=self.engine)
@@ -87,6 +96,10 @@ class BotRunner:
 
     async def stop(self):
         """bot を停止して切断。GUI（Web サーバー）は動き続ける。"""
+        async with self._lock:
+            await self._stop()
+
+    async def _stop(self):
         client, self.client = self.client, None
         task, self._connect_task = self._connect_task, None
         if client and not client.is_closed():
@@ -96,12 +109,13 @@ class BotRunner:
                 await task
             except Exception:
                 pass
-        if self.manager.client is client:
-            self.manager.client = None
+        if client:
+            self.manager.unbind(client)
 
     async def clear(self):
         """トークン削除時: bot を止めて未設定状態に戻す。"""
-        await self.stop()
-        self.state = "no_token"
-        self.error = None
+        async with self._lock:
+            await self._stop()
+            self.state = "no_token"
+            self.error = None
         await self.manager.broadcast()

@@ -101,8 +101,19 @@ class ConnectionManager:
         self._load_presets()
 
     def bind(self, client, default_guild_id: Optional[str] = None):
-        self.client = client
         self.default_guild_id = default_guild_id or None
+        if self.demo_active:
+            # デモ中は偽クライアントを維持し、実クライアントは終了時の復帰先として退避する
+            self._real_client = client
+        else:
+            self.client = client
+
+    def unbind(self, client):
+        """bot 停止時に実クライアントの参照を外す（デモ中の退避先も含む）。"""
+        if self.client is client:
+            self.client = None
+        if self._real_client is client:
+            self._real_client = None
 
     # --- サーバー選択 --------------------------------------------------------
     def _guild_ids(self) -> list:
@@ -290,6 +301,19 @@ class ConnectionManager:
         self.states.pop(vcm_demo.DEMO_GUILD_ID, None)
         self.demo_active = False
 
+    async def restore_voice(self, client):
+        """bot の（再）接続後、メインVCが設定済みのサーバーで読み上げVCへ入り直す。
+        デモ中でも実クライアントに対して行う（デモのギルドは対象外）。"""
+        for gid, st in list(self.states.items()):
+            if gid == vcm_demo.DEMO_GUILD_ID or not st.main_channel_id:
+                continue
+            if client.tts_state(gid)["channel_id"] == st.main_channel_id:
+                continue
+            try:
+                await client.tts_join(gid, st.main_channel_id)
+            except Exception as e:
+                print(f"[VCM] VC rejoin failed guild={gid}: {e!r}")
+
     # --- 参加希望（Discord 側からのチーム選択） --------------------------------
     def teams_for_recruit(self, guild_id: str) -> list:
         """募集ボタンが押された時点のチーム一覧（GUIの選択サーバーに依存しない）。"""
@@ -317,12 +341,11 @@ class ConnectionManager:
 
     async def gather(self) -> int:
         """チームに所属するユーザーをメインVCへ集める。
-        チーム未所属のユーザーは対象外（無関係なVCを巻き込まない）。"""
+        チーム未所属のユーザーは対象外（無関係なVCを巻き込まない）。
+        集合済みでも再実行できる（散開先が無く散開できないまま固まらないように）。"""
         st = self.state()
         if not st.main_channel_id:
             raise HTTPException(status_code=400, detail="メインVCが未設定です")
-        if st.gathered:
-            raise HTTPException(status_code=409, detail="すでに集合済みです（散開してください）")
         snap = self.client.snapshot(self.selected_guild_id)
         location = {m["id"]: ch["id"]
                     for ch in snap.get("channels", []) for m in ch["members"]}
@@ -402,7 +425,9 @@ class ConnectionManager:
             "teams": teams,
             "main_channel_id": st.main_channel_id if st else None,
             "preset_names": sorted(self.presets.get(gid, {}).keys()) if gid else [],
-            "can_scatter": st.gathered if st else False,
+            # 散開ボタンは「集合済み かつ 散開先が1つ以上記録済み」のときだけ出す
+            "can_scatter": bool(st and st.gathered and any(
+                t.get("home_channel_id") for t in st.teams.values())),
             "recruiting": bool(ready and gid and self.client.is_recruiting(gid)),
             "pinned_ids": sorted(st.pinned_ids) if st else [],
             "update": self.update_info,
@@ -500,7 +525,7 @@ class PinUser(BaseModel):
     user_id: str
 
 
-class SavePreset(BaseModel):
+class PresetName(BaseModel):
     name: str
 
 
@@ -672,14 +697,26 @@ def create_app(manager: ConnectionManager, runner) -> FastAPI:
         manager.set_main_channel(body.channel_id)
         # bot の入室はメインVCに追従（設定で入室・変更で移動・解除で退出）
         c = manager.client
-        if changed and c and c.is_ready():
-            # 募集メッセージは旧メインVCに紐づくため撤去（必要なら改めて募集）
-            await c.recruit_stop(manager.selected_guild_id)
-            if body.channel_id:
-                await c.tts_join(manager.selected_guild_id, body.channel_id)
-            else:
-                await c.tts_leave(manager.selected_guild_id)
+        gid = manager.selected_guild_id
+        error = None
+        if c and c.is_ready():
+            if changed:
+                # 募集メッセージは旧メインVCに紐づくため撤去（必要なら改めて募集）
+                await c.recruit_stop(gid)
+            try:
+                if body.channel_id:
+                    # 同じVCの再設定でも、bot が切断されていれば入室し直す
+                    if c.tts_state(gid)["channel_id"] != body.channel_id:
+                        await c.tts_join(gid, body.channel_id)
+                elif changed:
+                    await c.tts_leave(gid)
+            except Exception as e:
+                print(f"[VCM] VC join/leave failed: {e!r}")
+                error = ("読み上げbotがメインVCに入室できませんでした"
+                         "（bot にそのVCの接続権限があるか確認してください）")
         await manager.broadcast()
+        if error:
+            raise HTTPException(status_code=500, detail=error)
         return {"ok": True}
 
     # --- 参加希望（募集） ---
@@ -867,23 +904,24 @@ def create_app(manager: ConnectionManager, runner) -> FastAPI:
 
     # --- プリセット ---
     @app.post("/api/presets")
-    async def save_preset(body: SavePreset):
+    async def save_preset(body: PresetName):
         no_demo()  # デモのギルドIDで presets.json を汚さない
         manager.save_preset(body.name)
         await manager.broadcast()
         return {"ok": True}
 
-    @app.post("/api/presets/{name}/load")
-    async def load_preset(name: str):
+    # プリセット名は本文で受け取る（URL パスに入れると「/」を含む名前が別ルート扱いになる）
+    @app.post("/api/presets/load")
+    async def load_preset(body: PresetName):
         no_demo()
-        manager.load_preset(name)
+        manager.load_preset(body.name)
         await manager.broadcast()
         return {"ok": True}
 
-    @app.delete("/api/presets/{name}")
-    async def delete_preset(name: str):
+    @app.post("/api/presets/delete")
+    async def delete_preset(body: PresetName):
         no_demo()
-        manager.delete_preset(name)
+        manager.delete_preset(body.name)
         await manager.broadcast()
         return {"ok": True}
 
