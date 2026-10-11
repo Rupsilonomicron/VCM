@@ -280,7 +280,9 @@ class ConnectionManager:
             self._real_client = self.client
             self._real_selected = self.selected_guild_id
             self.demo_active = True
-        self.client = vcm_demo.DemoClient()
+        else:
+            self.client.close_demo()  # やり直し: 前のデモの模擬読み上げを止める
+        self.client = vcm_demo.DemoClient(on_change=self.broadcast)
         self.selected_guild_id = vcm_demo.DEMO_GUILD_ID
         self.states[vcm_demo.DEMO_GUILD_ID] = GuildState()  # 毎回まっさらな状態から
         if scenario == "advanced":
@@ -294,6 +296,7 @@ class ConnectionManager:
         """デモを終了して実クライアント・実サーバー選択へ戻す。"""
         if not self.demo_active:
             return
+        self.client.close_demo()
         self.client = self._real_client
         self.selected_guild_id = self._real_selected
         self._real_client = None
@@ -403,7 +406,9 @@ class ConnectionManager:
             "channel_id": None,
             "reading": None,
             "queue": [],
-            "dict": tts_store.get_guild_dict(gid) if gid else {},
+            # デモ中はデモ用の一時辞書を見せる（tts.json には触れない）
+            "dict": (dict(self.client.demo_dict) if self.demo_active
+                     else tts_store.get_guild_dict(gid) if gid else {}),
         }
         if ready and gid:
             tts.update(self.client.tts_state(gid))
@@ -863,7 +868,8 @@ def create_app(manager: ConnectionManager, runner) -> FastAPI:
 
     @app.post("/api/tts/test")
     async def tts_test(body: TtsTest):
-        _engine_ready()
+        if not manager.demo_active:  # デモは表示だけの模擬なので VOICEVOX 不要
+            _engine_ready()
         reader = client().get_reader(manager.selected_guild_id)
         if reader is None:
             raise HTTPException(status_code=409, detail="VC に入室していません")
@@ -880,11 +886,14 @@ def create_app(manager: ConnectionManager, runner) -> FastAPI:
     # --- 読み上げ辞書 ---
     @app.post("/api/tts/dict")
     async def dict_add(body: DictEntry):
-        no_demo()  # デモのギルドIDで tts.json を汚さない
         word = body.word.strip()
         reading = body.reading.strip()
         if not word or not reading:
             raise HTTPException(status_code=400, detail="単語と読みを入力してください")
+        if manager.demo_active:  # デモはデモ用の一時辞書へ（tts.json を汚さない）
+            manager.client.demo_dict[word] = reading
+            await manager.broadcast()
+            return {"ok": True}
         manager._ensure_selected()
         if manager.selected_guild_id is None:
             raise HTTPException(status_code=409, detail="操作対象サーバーがありません")
@@ -894,7 +903,10 @@ def create_app(manager: ConnectionManager, runner) -> FastAPI:
 
     @app.post("/api/tts/dict/delete")
     async def dict_delete(body: DictWord):
-        no_demo()
+        if manager.demo_active:
+            manager.client.demo_dict.pop(body.word, None)
+            await manager.broadcast()
+            return {"ok": True}
         manager._ensure_selected()
         if manager.selected_guild_id is None:
             raise HTTPException(status_code=409, detail="操作対象サーバーがありません")

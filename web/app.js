@@ -471,9 +471,11 @@ function renderTts() {
   ttsEngineEl.className = `status ${st[1]}`;
   ttsEngineEl.title = tts.engine_error || "";
 
-  const usable = tts.engine === "ready" && lastSnapshot.bot_state === "ready";
+  // チュートリアル中は VOICEVOX が無くても操作を練習できるよう表示する（読み上げは表示だけの模擬）
+  const demo = !!lastSnapshot.demo;
+  const usable = (tts.engine === "ready" || demo) && lastSnapshot.bot_state === "ready";
   ttsControlsEl.classList.toggle("hidden", !usable);
-  ttsGuideEl.classList.toggle("hidden", tts.engine !== "not_installed" && tts.engine !== "error");
+  ttsGuideEl.classList.toggle("hidden", demo || (tts.engine !== "not_installed" && tts.engine !== "error"));
   if (!usable) return;
 
   // bot の入退室はメインVCの設定に追従する（設定で入室・解除で退出）
@@ -763,7 +765,7 @@ const TOUR_CHAPTERS = {
         title: "画面の見方",
         text: "左が<b>ボイスチャンネル一覧</b>です。VCごとに接続中のメンバーが表示され、リアルタイムに更新されます。" +
           "右はチーム編成のパネルです。",
-        target: "#channels-panel",
+        target: ["#channels-panel", "#teams-panel"],  // 説明している左右両方を照らす
       },
       {
         title: "メインVCを設定する",
@@ -883,6 +885,77 @@ const TOUR_CHAPTERS = {
       },
     ],
   },
+  tts: {
+    title: "読み上げ編",
+    steps: [
+      {
+        title: "読み上げ編へようこそ",
+        text: "VCM はVCのチャットを<b>VOICEVOX の声で読み上げ</b>られます。" +
+          "実際に使うには PC に VOICEVOX のインストールが必要です（VCM が自動で見つけて起動します）。" +
+          "<br>チュートリアルでは音は出ず、読み上げ中の表示だけを再現します。",
+        target: null,
+      },
+      {
+        title: "読み上げバーの見方",
+        text: "ここが読み上げの操作バーです。左端に <b>VOICEVOX の状態</b>（接続済み・未検出など）が表示され、" +
+          "右側にスキップ・キュー消去・テスト・辞書のボタンと、読み上げ状況が並びます。",
+        target: "#ttsbar",
+      },
+      {
+        title: "メインVCを設定する",
+        text: "読み上げbotは<b>メインVCに自動で入室</b>します。プルダウンから<b>「集合ロビー」</b>を選んでください。" +
+          "（メインVCを変えるとbotも移動し、「未設定」に戻すと退出します）",
+        target: ["#controlbar", "#ttsbar"],
+        waitState: (s) => !!(s.tts && s.tts.channel_id),
+      },
+      {
+        title: "読み上げの対象",
+        text: "botが入室したVCには <b>🔊</b> が付きます。読み上げるのは、このVCの<b>内蔵チャット</b>" +
+          "（VCに付いているテキストチャット）に書き込まれたメッセージです。" +
+          "URL やコードは短く省略され、長文は途中で打ち切られます。",
+        target: () => [document.querySelector(".column.tts-joined")],
+      },
+      {
+        title: "テスト読み上げ",
+        text: "<b>「テスト」</b>を押すと、テスト用の文章を読み上げます。" +
+          "押してみて、バーの右側に読み上げ中の表示（▶）が出るのを確認しましょう。",
+        target: "#ttsbar",
+        waitApi: "/api/tts/test",
+      },
+      {
+        title: "辞書に登録する",
+        text: "読み間違える単語は<b>📖 辞書</b>で読み方を登録できます（サーバーごとに保存）。" +
+          "辞書を開き、例として<b>「VCM」→「ぶいしーえむ」</b>を登録してみましょう。" +
+          "<br>（※チュートリアルでの登録は実際の辞書には保存されません）",
+        // 辞書を開く前はボタン、開いた後は辞書ウィンドウを照らす
+        target: () => [dictModalEl.classList.contains("hidden")
+          ? document.getElementById("tts-dict")
+          : dictModalEl.querySelector(".modal-box")],
+        waitApi: "/api/tts/dict",
+        advanceDelay: 1200,  // 登録結果が一覧に出たのを見せてから次へ
+      },
+      {
+        title: "スキップとキュー消去",
+        text: "<b>⏭ スキップ</b>は読み上げ中の1件を打ち切ります。<b>キュー消去</b>は待ち中のメッセージを" +
+          "すべて捨てます。連投や荒らし、長文が来たときに使ってください。",
+        target: ["#tts-skip", "#tts-clear"],
+        onEnter: () => dictModalEl.classList.add("hidden"),  // 前のステップの辞書ウィンドウを閉じる
+      },
+      {
+        title: "声を選ぶ（/voice コマンド）",
+        text: "読み上げの声は参加者が自分で選べます。Discord のチャット欄で <b>/voice</b> と入力すると、" +
+          "キャラクター → スタイルの順に選ぶ画面が本人にだけ表示されます。設定はユーザーごとに保存されます。",
+        target: null,
+      },
+      {
+        title: "読み上げ編 完了！ 🎉",
+        text: "これで読み上げ機能の使い方はばっちりです。VOICEVOX をインストールして VCM を起動すれば、" +
+          "メインVCを設定するだけで読み上げが始まります。",
+        target: null,
+        last: true,
+      },
+    ],
+  },
 };
 
 const tourHighlightEl = document.createElement("div");
@@ -928,6 +1001,7 @@ function advanceTour() {
 function showTourStep() {
   const step = tourStep();
   if (!step) return;
+  if (step.onEnter) step.onEnter();
   const total = TOUR_CHAPTERS[tour.chapterId].steps.length;
   const waiting = !!(step.waitState || step.waitApi || step.waitSelect);
   tourBubbleEl.innerHTML =
@@ -997,7 +1071,9 @@ function tourOnState() {
 
 function tourOnApi(path) {
   const step = tourStep();
-  if (step && step.waitApi && path === step.waitApi) advanceTour();
+  if (!step || !step.waitApi || path !== step.waitApi) return;
+  if (!step.advanceDelay) { advanceTour(); return; }
+  setTimeout(() => { if (tourStep() === step) advanceTour(); }, step.advanceDelay);
 }
 
 function tourOnSelect() {

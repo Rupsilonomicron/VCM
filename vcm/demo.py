@@ -6,13 +6,18 @@ DemoClient は VCMClient と同じインターフェース（の必要な部分�
 ConnectionManager.client を一時的にこれへ差し替えることで、本物の API・
 サーバーロジック（シャッフル・集合散開・ピン留め等）がそのままデモデータに対して動く。
 
-Discord へ送信する系の操作（読み上げ・募集・コマンド）は無害な no-op。
+Discord へ送信する系の操作（募集・コマンド）は無害な no-op。
+読み上げは音を出さず、「読み上げ中」の表示だけを模擬する（DemoReader）。
+辞書はデモ用の一時辞書に登録し、tts.json には書き込まない。
 """
 
+import asyncio
 from typing import Optional
 from urllib.parse import quote
 
 DEMO_GUILD_ID = "demo"
+DEMO_READ_SECONDS = 3.0  # デモで1件を「読み上げ中」と表示しておく秒数
+DEMO_QUEUE_LIMIT = 50
 
 _PALETTE = ["#5865F2", "#57F287", "#FEE75C", "#EB459E", "#ED4245",
             "#3BA55D", "#FAA61A", "#00B0F4", "#9B59B6", "#E67E22"]
@@ -32,10 +37,61 @@ _MEMBER_NAMES = ["そら", "Kaito", "ユウキ", "あおい", "Rin",
                  "たくみ", "ミナト", "Haru", "ひなた", "さくら"]
 
 
+class DemoReader:
+    """GuildReader（tts.py）の代わり。音は出さず、キューと「読み上げ中」の表示だけを模擬する。"""
+
+    def __init__(self, on_change=None):
+        self._on_change = on_change  # 表示が変わったら GUI へ broadcast する非同期コールバック
+        self.queue: list = []
+        self.current: Optional[str] = None
+        self._skip: Optional[asyncio.Event] = None
+        self._task: Optional[asyncio.Task] = None
+
+    def enqueue(self, text: str, style_id: int):
+        if len(self.queue) >= DEMO_QUEUE_LIMIT:
+            return
+        self.queue.append(text)
+        if self._task is None or self._task.done():
+            self._task = asyncio.create_task(self._run())
+
+    def skip(self):
+        if self._skip:
+            self._skip.set()
+
+    def clear(self):
+        self.queue.clear()
+
+    def close(self):
+        if self._task and not self._task.done():
+            self._task.cancel()
+        self.queue.clear()
+        self.current = None
+
+    async def _run(self):
+        while self.queue:
+            self.current = self.queue.pop(0)
+            self._skip = asyncio.Event()
+            await self._notify()
+            try:  # 読み上げ時間ぶん待つ（スキップされたら即座に次へ）
+                await asyncio.wait_for(self._skip.wait(), timeout=DEMO_READ_SECONDS)
+            except asyncio.TimeoutError:
+                pass
+            self.current = None
+        self._skip = None
+        await self._notify()
+
+    async def _notify(self):
+        if self._on_change:
+            try:
+                await self._on_change()
+            except Exception:
+                pass
+
+
 class DemoClient:
     """デモ用の偽 VCMClient。VC 状態をメモリで持ち、移動で実際に動く。"""
 
-    def __init__(self):
+    def __init__(self, on_change=None):
         # channel_id -> {"name", "category", "member_ids": [str]}
         self.channels = {
             "demo-lobby": {"name": "集合ロビー", "category": "🎓 チュートリアル",
@@ -48,7 +104,13 @@ class DemoClient:
             for i, name in enumerate(_MEMBER_NAMES)
         }
         self.joined_channel_id: Optional[str] = None  # 読み上げbotの入室VC（見た目のみ）
+        self.reader = DemoReader(on_change)
+        self.demo_dict: dict = {}  # デモ用の一時辞書（tts.json には保存しない）
         self.user = "チュートリアル（デモ）"
+
+    def close_demo(self):
+        """デモ終了時の後始末（模擬読み上げのタスクを止める）。"""
+        self.reader.close()
 
     # --- VCMClient 互換インターフェース ----------------------------------------
     def is_ready(self) -> bool:
@@ -111,19 +173,26 @@ class DemoClient:
                 moved += 1
         return moved
 
-    # --- 読み上げ・募集は見た目だけ / no-op --------------------------------------
+    # --- 読み上げは表示だけ模擬 / 募集は no-op -----------------------------------
     def tts_state(self, guild_id) -> dict:
-        return {"channel_id": self.joined_channel_id, "reading": None, "queue": []}
+        if self.joined_channel_id is None:
+            return {"channel_id": None, "reading": None, "queue": []}
+        return {"channel_id": self.joined_channel_id,
+                "reading": self.reader.current, "queue": list(self.reader.queue)}
 
     def get_reader(self, guild_id):
-        return None
+        return self.reader if self.joined_channel_id else None
 
     async def tts_join(self, guild_id, channel_id) -> bool:
         self.joined_channel_id = channel_id
+        self.reader.clear()
+        self.reader.skip()
         return True
 
     async def tts_leave(self, guild_id):
         self.joined_channel_id = None
+        self.reader.clear()
+        self.reader.skip()
 
     def is_recruiting(self, guild_id) -> bool:
         return False
