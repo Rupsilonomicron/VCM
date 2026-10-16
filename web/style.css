@@ -158,6 +158,8 @@ main {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .column-title { font-weight: 600; font-size: 14px; }
+.team-column { border-top: 3px solid var(--team-color); }
+.team-column .column-title { color: var(--team-color); }
 .column-count { color: var(--muted); font-size: 12px; }
 
 .list { min-height: 40px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
@@ -175,6 +177,12 @@ main {
 .member:hover { background: var(--card-hover); }
 .member img { width: 26px; height: 26px; border-radius: 50%; background: #555; }
 .member .name { flex: 1; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.member.in-team {
+  background: color-mix(in srgb, var(--team-color) 18%, var(--card));
+  border-left: 4px solid var(--team-color);
+  padding-left: 4px;
+}
+.member.in-team:hover { background: color-mix(in srgb, var(--team-color) 28%, var(--card)); }
 .member.offline { opacity: .5; }
 .member.selected { outline: 2px solid var(--accent); background: #394264; }
 .member.selected .name::after { content: " ✓"; color: var(--accent); font-weight: 700; }

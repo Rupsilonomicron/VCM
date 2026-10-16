@@ -316,11 +316,31 @@ function maybeOpenTokenModal() {
 }
 
 // --- 描画 --------------------------------------------------------------
+// チームの色（チームIDで決まるので、他のチームを削除しても色は変わらない）
+const TEAM_COLORS = ["#ed6a5e", "#57c785", "#4aa3f0", "#f0a04b", "#b07cf0", "#3fbac2", "#f06fb0", "#a8d65a"];
+function teamColor(teamId) {
+  const n = Number(teamId);
+  if (n >= 1 && n <= TEAM_COLORS.length) return TEAM_COLORS[n - 1];
+  // 9チーム目以降は黄金角で色相をずらして生成（隣り合うIDが似た色にならない）。
+  // 明るさも交互に変えて、色相が近くなった場合でも見分けやすくする
+  const hue = Math.round((n * 137.508) % 360);
+  return `hsl(${hue}, 65%, ${n % 2 ? 72 : 60}%)`;
+}
+// user_id -> 所属チーム（render のたびに作り直す）
+let teamOfUser = {};
+
 function memberCard(m, teamId) {
   const div = document.createElement("div");
   div.className = "member" + (m.voice_channel_id ? "" : " offline") +
     (selectedIds.has(m.id) ? " selected" : "");
   div.dataset.userId = m.id;
+  // チーム所属者はチームの色で表示（未所属はそのまま）
+  const team = teamOfUser[m.id];
+  if (team) {
+    div.classList.add("in-team");
+    div.style.setProperty("--team-color", teamColor(team.id));
+    if (teamId == null) div.title = `チーム: ${team.name}`;
+  }
   div.innerHTML = `<img src="${escapeHtml(m.avatar || "")}" alt=""><span class="name">${escapeHtml(m.name)}</span>`;
   div.addEventListener("click", () => toggleSelect(m.id, div));
   // ネイティブD&D: ドラッグ中にDOMを動かさず、ドロップ時にだけ確定する
@@ -545,6 +565,16 @@ function render() {
   renderTts();
   renderDict();
 
+  // teamOfUser と、VC内の並び順（チーム一覧の順→チーム内の順。未所属は最後）を作る
+  teamOfUser = {};
+  const teamOrder = {};
+  let order = 0;
+  (lastSnapshot.teams || []).forEach((t) => t.members.forEach((m) => {
+    teamOfUser[m.id] = t;
+    teamOrder[m.id] = order++;
+  }));
+  const teamRank = (userId) => teamOrder[userId] ?? Number.MAX_SAFE_INTEGER;
+
   // VC 列（カテゴリー別にグループ表示。カテゴリーが無いサーバーは従来通りフラット表示）
   channelsEl.innerHTML = "";
   const chs = lastSnapshot.channels || [];
@@ -573,7 +603,10 @@ function render() {
       badge.title = "このVCを散開先にしているチーム（チーム見出しをVCへドラッグすると記録されます）";
       col.insertBefore(badge, list);
     }
-    ch.members.forEach((m) => list.appendChild(memberCard(m)));
+    // チームごとにまとめて並べる（チーム欄と同じ順。未所属は最後で、元の順のまま）
+    ch.members.slice()
+      .sort((a, b) => teamRank(a.id) - teamRank(b.id))
+      .forEach((m) => list.appendChild(memberCard(m)));
     enableDrop(col, "vc", ch.id);
     if (!hasCategories) {
       channelsEl.appendChild(col);
@@ -600,6 +633,8 @@ function render() {
   teamsEl.innerHTML = "";
   (lastSnapshot.teams || []).forEach((team) => {
     const { col, head, list } = makeColumn(team.name, team.members.length, "team", team.id);
+    col.classList.add("team-column");
+    col.style.setProperty("--team-color", teamColor(team.id));
     // ヘッダをドラッグで VC へ一括移動できるようにする
     head.draggable = true;
     head.classList.add("draggable-head");
