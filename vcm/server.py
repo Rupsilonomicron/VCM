@@ -546,6 +546,14 @@ class Settings(BaseModel):
 
 class TtsTest(BaseModel):
     text: Optional[str] = None
+    style_id: Optional[int] = None   # 指定があればその声で試聴（声の設定画面から）
+    params: Optional[dict] = None
+
+
+class UserVoice(BaseModel):
+    user_id: str
+    style_id: int
+    params: dict = {}
 
 
 class DictEntry(BaseModel):
@@ -873,8 +881,41 @@ def create_app(manager: ConnectionManager, runner) -> FastAPI:
         reader = client().get_reader(manager.selected_guild_id)
         if reader is None:
             raise HTTPException(status_code=409, detail="VC に入室していません")
-        reader.enqueue(body.text or "読み上げのテストです。", tts_store.DEFAULT_STYLE_ID)
+        style_id = tts_store.DEFAULT_STYLE_ID if body.style_id is None else body.style_id
+        params = tts_store.clean_params(body.params) if body.params is not None else None
+        reader.enqueue(body.text or "読み上げのテストです。", style_id, params)
         await manager.broadcast()
+        return {"ok": True}
+
+    # --- ユーザーごとの声の設定（メンバーカードの ⚙ から） ---
+    @app.get("/api/tts/speakers")
+    async def tts_speakers():
+        if manager.engine and manager.engine.state == "ready":
+            return {"speakers": await manager.engine.speakers()}
+        if manager.demo_active:  # VOICEVOX 未導入でもチュートリアルで画面を試せるように
+            return {"speakers": [{"name": "ずんだもん", "styles": [
+                {"name": "ノーマル", "id": 3}, {"name": "あまあま", "id": 1}]}]}
+        _engine_ready()
+
+    @app.get("/api/tts/voice/{user_id}")
+    async def get_voice(user_id: str):
+        # ranges はスライダーの範囲（名前 -> [最小, 最大, 初期値]）
+        ranges = {k: list(v) for k, v in tts_store.VOICE_PARAMS.items()}
+        if manager.demo_active:
+            v = manager.client.demo_voices.get(user_id, {})
+            return {"style_id": v.get("style_id", tts_store.DEFAULT_STYLE_ID),
+                    "params": tts_store.clean_params(v.get("params")), "ranges": ranges}
+        return {"style_id": tts_store.get_user_voice(user_id),
+                "params": tts_store.get_user_params(user_id), "ranges": ranges}
+
+    @app.post("/api/tts/voice")
+    async def set_voice(body: UserVoice):
+        if manager.demo_active:  # デモは一時的な設定へ（tts.json を汚さない）
+            manager.client.demo_voices[body.user_id] = {
+                "style_id": body.style_id, "params": tts_store.clean_params(body.params)}
+            return {"ok": True}
+        tts_store.set_user_voice(body.user_id, body.style_id)
+        tts_store.set_user_params(body.user_id, body.params)
         return {"ok": True}
 
     @app.post("/api/tts/redetect")

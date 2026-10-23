@@ -93,7 +93,8 @@ class VCMClient(discord.Client):
         text = tts.preprocess(message.clean_content, tts.get_guild_dict(message.guild.id))
         if not text:
             return
-        reader.enqueue(text, tts.get_user_voice(message.author.id))
+        reader.enqueue(text, tts.get_user_voice(message.author.id),
+                       tts.get_user_params(message.author.id))
         await self._on_change()
 
     async def _sync_commands(self, guild: discord.Guild):

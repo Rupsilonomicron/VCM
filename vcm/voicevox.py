@@ -181,12 +181,16 @@ class VoicevoxEngine:
         ]
         return self._speakers_cache
 
-    async def synth_pcm(self, text: str, style_id: int) -> bytes:
-        """テキストを 48kHz/16bit/ステレオ の生 PCM に合成（FFmpeg 不要）。"""
-        params = {"text": text, "speaker": style_id}
-        async with self.session().post(f"{ENGINE_URL}/audio_query", params=params) as resp:
+    async def synth_pcm(self, text: str, style_id: int, params: Optional[dict] = None) -> bytes:
+        """テキストを 48kHz/16bit/ステレオ の生 PCM に合成（FFmpeg 不要）。
+        params は話速・音高などの調整値（tts.VOICE_PARAMS のキー）で、クエリに上書きする。"""
+        async with self.session().post(f"{ENGINE_URL}/audio_query",
+                                       params={"text": text, "speaker": style_id}) as resp:
             resp.raise_for_status()
             query = await resp.json()
+        for key, value in (params or {}).items():
+            if key in query:  # エンジンが対応していない項目（古い版の pauseLengthScale 等）は送らない
+                query[key] = value
         query["outputSamplingRate"] = SAMPLE_RATE
         query["outputStereo"] = True
         async with self.session().post(

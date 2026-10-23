@@ -200,6 +200,13 @@ main {
 .member:hover .member-pin { opacity: 1; }
 .member-pin.on { opacity: 1; filter: none; }
 .member.pinned { box-shadow: inset 3px 0 0 #e3c26e; }
+/* 声の設定はマウスを乗せなくても気づけるよう常に表示する */
+.member-voice {
+  background: none; border: none; color: var(--text); cursor: pointer;
+  font-size: 14px; padding: 0 2px; opacity: .6; flex: none;
+}
+.member:hover .member-voice { opacity: .85; }
+.member-voice:hover { opacity: 1 !important; color: var(--accent); }
 .drag-stack {
   position: absolute; top: -1000px; left: -1000px;
   width: 220px; display: flex; flex-direction: column; gap: 6px;
@@ -333,3 +340,19 @@ a.btn { text-decoration: none; display: inline-block; }
 .token-help summary { cursor: pointer; }
 .token-help ol { margin: 8px 0 0; padding-left: 20px; line-height: 1.8; }
 .token-help a { color: var(--accent); }
+
+/* --- 声の設定モーダル --- */
+.voice-title { display: flex; align-items: center; gap: 8px; }
+.voice-title img { width: 24px; height: 24px; border-radius: 50%; background: #555; }
+.voice-param { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.voice-param label { width: 150px; flex: none; font-size: 13px; color: var(--muted); }
+.voice-param input[type="range"] { flex: 1; min-width: 0; accent-color: var(--accent); }
+.voice-param .voice-val { width: 44px; flex: none; text-align: right; font-size: 13px; font-variant-numeric: tabular-nums; }
+.voice-test { display: flex; gap: 6px; margin: 12px 0 8px; }
+.voice-test input {
+  flex: 1; min-width: 0;
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 7px 10px; font-size: 13px;
+}
+.voice-test input:focus { outline: 1px solid var(--accent); }

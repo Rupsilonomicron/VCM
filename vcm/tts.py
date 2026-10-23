@@ -26,6 +26,18 @@ DEFAULT_STYLE_ID = 3  # ずんだもん（ノーマル）
 MAX_TEXT_LEN = 120
 QUEUE_LIMIT = 50  # 荒らし・連投対策の上限。超えた分は捨てる
 
+# ユーザーごとに変えられる VOICEVOX の調整項目: 名前 -> (最小, 最大, 初期値)
+# 範囲は VOICEVOX エディタのスライダーに合わせている
+VOICE_PARAMS = {
+    "speedScale": (0.5, 2.0, 1.0),         # 話速
+    "pitchScale": (-0.15, 0.15, 0.0),      # 音高
+    "intonationScale": (0.0, 2.0, 1.0),    # 抑揚
+    "volumeScale": (0.0, 2.0, 1.0),        # 音量
+    "pauseLengthScale": (0.0, 2.0, 1.0),   # 間の長さ（句読点などの無音）
+    "prePhonemeLength": (0.0, 1.5, 0.1),   # 開始無音（秒）
+    "postPhonemeLength": (0.0, 1.5, 0.1),  # 終了無音（秒）
+}
+
 _URL_RE = re.compile(r"https?://\S+")
 _EMOJI_RE = re.compile(r"<a?:(\w+):\d+>")
 _CODEBLOCK_RE = re.compile(r"```.*?```", re.DOTALL)
@@ -58,6 +70,29 @@ def get_user_voice(user_id) -> int:
 def set_user_voice(user_id, style_id: int):
     store = _load_store()
     store.setdefault("user_voices", {})[str(user_id)] = int(style_id)
+    _save_store(store)
+
+
+def clean_params(params) -> dict:
+    """調整項目を既知のものだけに絞り、範囲内に丸める（未指定は初期値）。"""
+    params = params if isinstance(params, dict) else {}
+    out = {}
+    for key, (lo, hi, default) in VOICE_PARAMS.items():
+        try:
+            v = float(params.get(key, default))
+        except (TypeError, ValueError):
+            v = default
+        out[key] = round(min(hi, max(lo, v)), 3)
+    return out
+
+
+def get_user_params(user_id) -> dict:
+    return clean_params(_load_store().get("user_params", {}).get(str(user_id)))
+
+
+def set_user_params(user_id, params: dict):
+    store = _load_store()
+    store.setdefault("user_params", {})[str(user_id)] = clean_params(params)
     _save_store(store)
 
 
@@ -123,16 +158,16 @@ class GuildReader:
         self._skipping = False
         self._task = asyncio.create_task(self._loop())
 
-    def enqueue(self, text: str, style_id: int):
+    def enqueue(self, text: str, style_id: int, params: Optional[dict] = None):
         if self.queue.qsize() >= QUEUE_LIMIT:
             return
-        self.queue.put_nowait((text, style_id))
+        self.queue.put_nowait((text, style_id, params))
 
     def snapshot(self) -> dict:
         return {
             "channel_id": str(self.channel_id),
             "reading": self.current,
-            "queue": [t for t, _ in list(self.queue._queue)],  # 表示用
+            "queue": [item[0] for item in list(self.queue._queue)],  # 表示用
         }
 
     def skip(self):
@@ -165,10 +200,10 @@ class GuildReader:
 
     async def _loop(self):
         while True:
-            text, style_id = await self.queue.get()
+            text, style_id, params = await self.queue.get()
             self.current = text
             await self._notify()
-            self._play_task = asyncio.create_task(self._play(text, style_id))
+            self._play_task = asyncio.create_task(self._play(text, style_id, params))
             try:
                 await self._play_task
             except asyncio.CancelledError:
@@ -182,12 +217,12 @@ class GuildReader:
             self.current = None
             await self._notify()
 
-    async def _play(self, text: str, style_id: int):
+    async def _play(self, text: str, style_id: int, params: Optional[dict]):
         guild = self.client.get_guild(self.guild_id)
         vc = guild.voice_client if guild else None
         if vc is None or not vc.is_connected():
             return
-        pcm = await self.engine.synth_pcm(text, style_id)
+        pcm = await self.engine.synth_pcm(text, style_id, params)
         done = asyncio.Event()
         loop = asyncio.get_running_loop()
 

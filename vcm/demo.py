@@ -47,7 +47,7 @@ class DemoReader:
         self._skip: Optional[asyncio.Event] = None
         self._task: Optional[asyncio.Task] = None
 
-    def enqueue(self, text: str, style_id: int):
+    def enqueue(self, text: str, style_id: int, params: Optional[dict] = None):
         if len(self.queue) >= DEMO_QUEUE_LIMIT:
             return
         self.queue.append(text)
@@ -106,6 +106,7 @@ class DemoClient:
         self.joined_channel_id: Optional[str] = None  # 読み上げbotの入室VC（見た目のみ）
         self.reader = DemoReader(on_change)
         self.demo_dict: dict = {}  # デモ用の一時辞書（tts.json には保存しない）
+        self.demo_voices: dict = {}  # デモ用の一時声設定 user_id -> {"style_id", "params"}
         self.user = "チュートリアル（デモ）"
 
     def close_demo(self):

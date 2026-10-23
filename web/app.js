@@ -367,6 +367,18 @@ function memberCard(m, teamId) {
       setTimeout(() => stack.remove(), 0);
     }
   });
+  // 読み上げが使えるときは「声の設定」ボタンを付ける（VC一覧・チームの両方）
+  if (ttsUsable()) {
+    const voice = document.createElement("button");
+    voice.className = "member-voice";
+    voice.textContent = "⚙";
+    voice.title = "読み上げの声を設定";
+    voice.addEventListener("click", (e) => {
+      e.stopPropagation();  // 選択トグルを発火させない
+      openVoiceModal(m);
+    });
+    div.appendChild(voice);
+  }
   // チーム内のカードには「ピン留め」「外す」ボタンを付ける
   if (teamId != null) {
     const pinned = (lastSnapshot.pinned_ids || []).includes(m.id);
@@ -484,6 +496,12 @@ const ENGINE_STATUS = {
   off: ["読み上げ無効", "off"],
 };
 
+// チュートリアル中は VOICEVOX が無くても操作を練習できるよう表示する（読み上げは表示だけの模擬）
+function ttsUsable() {
+  const tts = lastSnapshot.tts || { engine: "off" };
+  return (tts.engine === "ready" || !!lastSnapshot.demo) && lastSnapshot.bot_state === "ready";
+}
+
 function renderTts() {
   const tts = lastSnapshot.tts || { engine: "off" };
   const st = ENGINE_STATUS[tts.engine] || ENGINE_STATUS.off;
@@ -491,9 +509,8 @@ function renderTts() {
   ttsEngineEl.className = `status ${st[1]}`;
   ttsEngineEl.title = tts.engine_error || "";
 
-  // チュートリアル中は VOICEVOX が無くても操作を練習できるよう表示する（読み上げは表示だけの模擬）
   const demo = !!lastSnapshot.demo;
-  const usable = (tts.engine === "ready" || demo) && lastSnapshot.bot_state === "ready";
+  const usable = ttsUsable();
   ttsControlsEl.classList.toggle("hidden", !usable);
   ttsGuideEl.classList.toggle("hidden", demo || (tts.engine !== "not_installed" && tts.engine !== "error"));
   if (!usable) return;
@@ -555,6 +572,121 @@ dictReadingEl.addEventListener("keydown", (e) => {
   if (e.key === "Enter") document.getElementById("dict-add-btn").click();
 });
 
+// --- ユーザーごとの声の設定 ---------------------------------------------------
+const voiceModalEl = document.getElementById("voice-modal");
+const voiceSpeakerEl = document.getElementById("voice-speaker");
+const voiceStyleEl = document.getElementById("voice-style");
+const voiceParamsEl = document.getElementById("voice-params");
+const voiceTestBtn = document.getElementById("voice-test-btn");
+// 表示名と小数の桁数（範囲と初期値はサーバーの tts.VOICE_PARAMS から受け取る）
+const VOICE_PARAM_UI = {
+  speedScale: ["話速", 2],
+  pitchScale: ["音高", 2],
+  intonationScale: ["抑揚", 2],
+  volumeScale: ["音量", 2],
+  pauseLengthScale: ["間の長さ", 2],
+  prePhonemeLength: ["開始無音（秒）", 2],
+  postPhonemeLength: ["終了無音（秒）", 2],
+};
+let voiceTarget = null;   // 設定中のユーザー
+let voiceSpeakers = [];
+let voiceRanges = {};
+
+async function openVoiceModal(m) {
+  const [sp, cur] = await Promise.all([
+    api("GET", "/api/tts/speakers"),
+    api("GET", `/api/tts/voice/${encodeURIComponent(m.id)}`),
+  ]);
+  if (!sp || !cur) return;
+  voiceTarget = m;
+  voiceSpeakers = sp.speakers || [];
+  voiceRanges = cur.ranges || {};
+  document.getElementById("voice-avatar").src = m.avatar || "";
+  document.getElementById("voice-name").textContent = m.name;
+  document.getElementById("voice-test-text").value = "";
+
+  voiceSpeakerEl.innerHTML = "";
+  voiceSpeakers.forEach((s, i) => voiceSpeakerEl.add(new Option(s.name, String(i))));
+  // 現在のスタイルIDを持つキャラクターを選ぶ（見つからなければ先頭）
+  const idx = Math.max(0, voiceSpeakers.findIndex((s) => s.styles.some((st) => st.id === cur.style_id)));
+  voiceSpeakerEl.value = String(idx);
+  fillVoiceStyles(cur.style_id);
+  buildVoiceParams(cur.params || {});
+  renderVoiceModal();
+  voiceModalEl.classList.remove("hidden");
+}
+
+function fillVoiceStyles(styleId) {
+  const sp = voiceSpeakers[Number(voiceSpeakerEl.value)];
+  voiceStyleEl.innerHTML = "";
+  (sp ? sp.styles : []).forEach((st) => voiceStyleEl.add(new Option(st.name, String(st.id))));
+  if (sp && sp.styles.some((st) => st.id === styleId)) voiceStyleEl.value = String(styleId);
+}
+
+function buildVoiceParams(values) {
+  voiceParamsEl.innerHTML = "";
+  Object.entries(VOICE_PARAM_UI).forEach(([key, [label, digits]]) => {
+    const range = voiceRanges[key];
+    if (!range) return;
+    const [lo, hi, def] = range;
+    const row = document.createElement("div");
+    row.className = "voice-param";
+    row.innerHTML =
+      `<label for="vp-${key}">${label}</label>` +
+      `<input id="vp-${key}" type="range" min="${lo}" max="${hi}" step="0.01">` +
+      `<span class="voice-val"></span>`;
+    const input = row.querySelector("input");
+    const val = row.querySelector(".voice-val");
+    input.value = String(values[key] ?? def);
+    input.dataset.key = key;
+    input.dataset.def = String(def);
+    const show = () => { val.textContent = Number(input.value).toFixed(digits); };
+    input.addEventListener("input", show);
+    input.addEventListener("dblclick", () => { input.value = String(def); show(); });  // ダブルクリックで初期値
+    input.title = `ダブルクリックで初期値（${def}）に戻す`;
+    show();
+    voiceParamsEl.appendChild(row);
+  });
+}
+
+function currentVoice() {
+  const params = {};
+  voiceParamsEl.querySelectorAll("input[type=range]").forEach((el) => {
+    params[el.dataset.key] = Number(el.value);
+  });
+  return { style_id: Number(voiceStyleEl.value), params };
+}
+
+// 試聴は読み上げbotが入室中のときだけ（スナップショットが届くたびに更新）
+function renderVoiceModal() {
+  const joined = !!(lastSnapshot.tts && lastSnapshot.tts.channel_id);
+  voiceTestBtn.disabled = !joined;
+  voiceTestBtn.title = joined ? "" : "メインVCを設定して読み上げbotを入室させると試聴できます";
+}
+
+function closeVoiceModal() {
+  voiceModalEl.classList.add("hidden");
+  voiceTarget = null;
+}
+
+voiceSpeakerEl.onchange = () => fillVoiceStyles(null);
+voiceTestBtn.onclick = () => api("POST", "/api/tts/test", {
+  text: document.getElementById("voice-test-text").value.trim() || null,
+  ...currentVoice(),
+});
+document.getElementById("voice-reset").onclick = () => {
+  voiceParamsEl.querySelectorAll("input[type=range]").forEach((el) => {
+    el.value = el.dataset.def;
+    el.dispatchEvent(new Event("input"));
+  });
+};
+document.getElementById("voice-cancel").onclick = closeVoiceModal;
+document.getElementById("voice-save").onclick = async () => {
+  if (!voiceTarget || !voiceStyleEl.value) return;
+  const ok = await api("POST", "/api/tts/voice", { user_id: voiceTarget.id, ...currentVoice() });
+  if (ok) closeVoiceModal();
+};
+
 function render() {
   updateStatus();
   renderUpdate();
@@ -564,6 +696,7 @@ function render() {
   renderControls();
   renderTts();
   renderDict();
+  renderVoiceModal();
 
   // teamOfUser と、VC内の並び順（チーム一覧の順→チーム内の順。未所属は最後）を作る
   teamOfUser = {};
